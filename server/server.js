@@ -7,6 +7,7 @@ import { protect, authorize } from './middleware/authMiddleware.js';
 import userRoutes from './routes/userRoutes.js';
 import availabilityRoutes from './routes/availabilityRoutes.js';
 import patientRoutes from './routes/patientRoutes.js';
+import appointmentRoutes from './routes/appointmentRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -51,6 +52,8 @@ app.use((req, res, next) => {
     req.dbPool = pool;
     next();
 });
+
+app.use('/api/appointments', appointmentRoutes);
 
 // --- Definición de Rutas ---
 

@@ -1,11 +1,10 @@
-// src/pages/ProfessionalDashboardPage/views/AppointmentsView.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import authFetch from '../../../utils/authFetch';
 import {
     Typography, Paper, Modal, Box, Button, Chip, Grid, TextField,
     Select, MenuItem, FormControl, InputLabel, IconButton,
-    Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Link as MuiLink,
-    Avatar, Tooltip, Stack
+    Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, Alert,
+    Avatar, Tooltip, Stack, CircularProgress
 } from '@mui/material';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -17,7 +16,7 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
-import { format, parseISO, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
+import { format, parseISO, setMinutes, setSeconds, setMilliseconds, startOfWeek, endOfWeek } from 'date-fns';
 import { es as fnsEsLocale } from 'date-fns/locale';
 import { LocalizationProvider, DateTimePicker, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -78,9 +77,9 @@ const AppointmentsView = () => {
     const [openDeleteAppointmentConfirmModal, setOpenDeleteAppointmentConfirmModal] = useState(false);
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [professionalNotesModal, setProfessionalNotesModal] = useState('');
-    const [loadingEvents, setLoadingEvents] = useState(false);
-    const [apiError, setApiError] = useState(null);
-
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const calendarRef = useRef(null);
 
     const getInitials = (name) => {
         if (!name || typeof name !== 'string') return '';
@@ -94,41 +93,50 @@ const AppointmentsView = () => {
         return name.substring(0, 2).toUpperCase();
     };
 
-    useEffect(() => {
-        const fetchAppointments = async () => {
-            setLoadingEvents(true);
-            setApiError(null);
-            try {
-                // const data = await authFetch('http://localhost:3001/api/professional/appointments');
-                const data = { events: mockAppointments }; // Simulación
-
-                if (data) {
-                    const appointmentsData = Array.isArray(data) ? data : (data.events || []);
-                    const formattedEvents = appointmentsData.map(appt => ({
-                        id: appt.id,
-                        title: appt.title,
-                        start: appt.start,
-                        end: appt.end,
-                        extendedProps: { ...appt.extendedProps, professionalNotes: appt.extendedProps.professionalNotes || '' },
-                        backgroundColor: statusColors[appt.extendedProps.status]?.backgroundColor || '#757575',
-                        borderColor: statusColors[appt.extendedProps.status]?.borderColor || '#757575',
-                    }));
-                    setAllEvents(formattedEvents);
-                }
-            } catch (error) {
-                console.error("Error cargando turnos:", error.message);
-                setApiError(error.message);
-            } finally {
-                setLoadingEvents(false);
-            }
-        };
-        fetchAppointments();
+    const fetchAppointments = useCallback(async (viewInfo) => {
+        setLoading(true);
+        setError('');
+        try {
+            const startDate = format(viewInfo?.start || startOfWeek(new Date(), {locale: fnsEsLocale}), 'yyyy-MM-dd');
+            const endDate = format(viewInfo?.end || endOfWeek(new Date(), {locale: fnsEsLocale}), 'yyyy-MM-dd');
+            const data = await authFetch(`http://localhost:3001/api/appointments?startDate=${startDate}&endDate=${endDate}`);
+            const appointmentsData = Array.isArray(data) ? data : [];
+            const formattedEvents = appointmentsData.map(appt => ({
+                id: String(appt.id), title: appt.title, start: appt.start, end: appt.end,
+                extendedProps: {
+                    status: appt.status, reasonForVisit: appt.reasonForVisit,
+                    professionalNotes: appt.professionalNotes || '', patientId: appt.patientId,
+                    patientDni: appt.patientDni, patientEmail: appt.patientEmail,
+                    patientPhone: appt.patientPhone
+                },
+                backgroundColor: statusColors[appt.status]?.backgroundColor || '#757575',
+                borderColor: statusColors[appt.status]?.borderColor || '#757575',
+            }));
+            setAllEvents(formattedEvents);
+        } catch (err) {
+            setError(err.message || "Error al cargar los turnos.");
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    const fetchPatientsForAutocomplete = useCallback(async () => {
+        try {
+            const data = await authFetch('http://localhost:3001/api/patients');
+            setExistingPatients(data || []);
+        } catch (err) {
+             setError(err.message || "Error al cargar pacientes.");
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchPatientsForAutocomplete();
+    }, [fetchPatientsForAutocomplete]);
 
     useEffect(() => {
         let eventsToDisplay = allEvents;
         if (statusFilter && statusFilter !== 'ALL') {
-            eventsToDisplay = eventsToDisplay.filter(event => event.extendedProps.status === statusFilter);
+            eventsToDisplay = allEvents.filter(event => event.extendedProps.status === statusFilter);
         }
         setFilteredEvents(eventsToDisplay);
     }, [allEvents, statusFilter]);
@@ -155,47 +163,26 @@ const AppointmentsView = () => {
         if (selectedEvent) {
             try {
                 await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/status`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ status: newStatus }),
+                    method: 'PUT', body: JSON.stringify({ status: newStatus }),
                 });
-                const updatedEvents = allEvents.map(e =>
-                    e.id === selectedEvent.id
-                        ? { ...e, extendedProps: { ...e.extendedProps, status: newStatus }, backgroundColor: statusColors[newStatus]?.backgroundColor, borderColor: statusColors[newStatus]?.borderColor }
-                        : e
-                );
+                const updatedEvents = allEvents.map(e => e.id === selectedEvent.id ? { ...e, extendedProps: { ...e.extendedProps, status: newStatus }, backgroundColor: statusColors[newStatus]?.backgroundColor, borderColor: statusColors[newStatus]?.borderColor } : e);
                 setAllEvents(updatedEvents);
                 setSelectedEvent(prev => ({...prev, status: newStatus}));
-            } catch (error) {
-                console.error("Error cambiando estado:", error.message);
-                alert(`Error cambiando estado: ${error.message}`);
-            }
+            } catch (err) { alert(`Error cambiando estado: ${err.message}`); }
         }
     };
     
     const handleSaveProfessionalNotes = async () => {
         if (selectedEvent) {
-            setLoadingEvents(true);
-            setApiError(null);
             try {
                 await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/notes`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ professionalNotes: professionalNotesModal }),
+                    method: 'PUT', body: JSON.stringify({ professionalNotes: professionalNotesModal }),
                 });
-                const updatedEvents = allEvents.map(e =>
-                    e.id === selectedEvent.id
-                        ? { ...e, extendedProps: { ...e.extendedProps, professionalNotes: professionalNotesModal } }
-                        : e
-                );
+                const updatedEvents = allEvents.map(e => e.id === selectedEvent.id ? { ...e, extendedProps: { ...e.extendedProps, professionalNotes: professionalNotesModal } } : e);
                 setAllEvents(updatedEvents);
                 setSelectedEvent(prev => ({...prev, professionalNotes: professionalNotesModal}));
                 alert("Notas guardadas exitosamente.");
-            } catch (error) {
-                console.error("Error guardando notas:", error.message);
-                alert(`Error guardando notas: ${error.message}`);
-                setApiError(error.message);
-            } finally {
-                setLoadingEvents(false);
-            }
+            } catch (err) { alert(`Error guardando notas: ${err.message}`); }
         }
     };
 
@@ -216,8 +203,8 @@ const AppointmentsView = () => {
                 newValue = setMilliseconds(setSeconds(setMinutes(newValue, roundedMinutes),0),0);
             }
             const hour = newValue.getHours();
-            if (hour < 7 || (hour === 21 && minutes > 30) || hour >= 22) {
-                alert("Los turnos solo pueden programarse entre las 07:00 y las 21:30.");
+            if (hour < 7 || (hour >= 22)) {
+                alert("Los turnos solo pueden programarse entre las 07:00 y las 21:59.");
                 return;
             }
         }
@@ -235,43 +222,34 @@ const AppointmentsView = () => {
     };
     const handleSaveNewAppointment = async () => {
         if (!validateNewAppointmentForm()) return;
-        
+        const { patient, dateTime, reasonForVisit } = newAppointmentData;
         const newAppointmentPayload = {
-            patientId: newAppointmentData.patient.id,
-            dateTime: newAppointmentData.dateTime.toISOString(),
-            reasonForVisit: newAppointmentData.reasonForVisit,
-            // El backend debería asignar el professionalId basado en el token
+            patientId: patient.id,
+            dateTime: dateTime.toISOString(),
+            reasonForVisit
         };
-
         try {
-            // const savedAppointment = await authFetch('http://localhost:3001/api/appointments/manual', {
-            //     method: 'POST',
-            //     body: JSON.stringify(newAppointmentPayload),
-            // });
-            // Simulación
-            const savedAppointment = {
-                id: `appt_manual_${Date.now()}`,
-                title: newAppointmentData.patient.fullName,
-                start: newAppointmentData.dateTime.toISOString(),
-                end: new Date(newAppointmentData.dateTime.getTime() + 30 * 60000).toISOString(),
-                extendedProps: {
-                    patientId: newAppointmentData.patient.id,
-                    patientDni: newAppointmentData.patient.dni,
-                    patientEmail: newAppointmentData.patient.email,
-                    patientPhone: newAppointmentData.patient.phone,
-                    reasonForVisit: newAppointmentData.reasonForVisit,
-                    status: 'SCHEDULED', professionalNotes: ''
-                },
-                backgroundColor: statusColors['SCHEDULED']?.backgroundColor,
-                borderColor: statusColors['SCHEDULED']?.borderColor,
-            };
+            const savedAppointment = await authFetch('http://localhost:3001/api/appointments/manual', {
+                method: 'POST', body: JSON.stringify(newAppointmentPayload),
+            });
             if (savedAppointment) {
-                 setAllEvents(prev => [...prev, savedAppointment]);
+                const newEvent = {
+                    id: String(savedAppointment.id), title: savedAppointment.title,
+                    start: savedAppointment.start, end: savedAppointment.end,
+                    extendedProps: {
+                        status: savedAppointment.status, reasonForVisit: savedAppointment.reasonForVisit,
+                        professionalNotes: savedAppointment.professionalNotes || '', patientId: savedAppointment.patientId,
+                        patientDni: savedAppointment.patientDni, patientEmail: savedAppointment.patientEmail,
+                        patientPhone: savedAppointment.patientPhone
+                    },
+                    backgroundColor: statusColors[savedAppointment.status]?.backgroundColor || '#757575',
+                    borderColor: statusColors[savedAppointment.status]?.borderColor || '#757575',
+                };
+                setAllEvents(prev => [...prev, newEvent]);
             }
             handleCloseNewAppointmentModal();
-        } catch (error) {
-            console.error("Error guardando nuevo turno:", error.message);
-            setNewAppointmentErrors(prev => ({...prev, form: error.message}));
+        } catch (err) {
+            setNewAppointmentErrors(prev => ({ ...prev, form: err.message }));
         }
     };
 
@@ -301,33 +279,21 @@ const AppointmentsView = () => {
     const handleSaveNewPatientFromSubModal = async () => {
         if (!validateNewPatientSubForm()) return;
         const newPatientPayload = {
-            dni: newPatientFormData.dni,
-            lastName: newPatientFormData.lastName,
-            firstName: newPatientFormData.firstName,
-            email: newPatientFormData.email,
+            dni: newPatientFormData.dni, lastName: newPatientFormData.lastName,
+            firstName: newPatientFormData.firstName, email: newPatientFormData.email,
             phone: newPatientFormData.phone,
             birthDate: newPatientFormData.birthDate ? format(newPatientFormData.birthDate, 'yyyy-MM-dd') : null,
         };
         try {
-            // const savedPatient = await authFetch('http://localhost:3001/api/patients', {
-            //     method: 'POST',
-            //     body: JSON.stringify(newPatientPayload),
-            // });
-             // Simulación
-            const savedPatient = {
-                id: `patient_${Date.now()}`,
-                ...newPatientPayload,
-                fullName: `${newPatientPayload.firstName} ${newPatientPayload.lastName}`,
-            };
-
+            const savedPatient = await authFetch('http://localhost:3001/api/patients', { method: 'POST', body: JSON.stringify(newPatientPayload) });
             if(savedPatient){
-                setExistingPatients(prev => [...prev, savedPatient]);
-                setNewAppointmentData(prev => ({ ...prev, patient: savedPatient }));
+                const patientWithFullName = {...savedPatient, fullName: `${savedPatient.firstName || ''} ${savedPatient.lastName || ''}`.trim()};
+                setExistingPatients(prev => [...prev, patientWithFullName]);
+                setNewAppointmentData(prev => ({ ...prev, patient: patientWithFullName }));
             }
             handleCloseCreatePatientSubModal();
-        } catch (error) {
-            console.error("Error guardando nuevo paciente (submodal):", error.message);
-            setNewPatientFormErrors(prev => ({...prev, form: error.message}));
+        } catch (err) {
+            setNewPatientFormErrors(prev => ({...prev, form: err.message}));
         }
     };
 
@@ -343,14 +309,11 @@ const AppointmentsView = () => {
     const handleConfirmDeleteAppointment = async () => {
         if (selectedEvent) {
             try {
-                // await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}`, { method: 'DELETE' });
+                await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}`, { method: 'DELETE' });
                 setAllEvents(prev => prev.filter(e => e.id !== selectedEvent.id));
                 handleCloseDeleteAppointmentModal();
                 handleCloseDetailModal();
-            } catch (error) {
-                console.error("Error eliminando turno:", error.message);
-                alert(`Error eliminando turno: ${error.message}`);
-            }
+            } catch (err) { alert(`Error eliminando turno: ${err.message}`); }
         }
     };
 
@@ -370,32 +333,19 @@ const AppointmentsView = () => {
                     return;
                 }
                 const hour = newDateTimeForReprogram.getHours();
-                if (hour < 7 || (hour === 21 && minutes > 30) || hour >= 22) {
-                    alert("Los turnos solo pueden reprogramarse entre las 07:00 y las 21:30.");
+                if (hour < 7 || (hour >= 22)) {
+                    alert("Los turnos solo pueden reprogramarse entre las 07:00 y las 21:59.");
                     return;
                 }
             }
 
-            const duration = parseISO(selectedEvent.end).getTime() - parseISO(selectedEvent.start).getTime();
-            const newEndDate = new Date(newDateTimeForReprogram.getTime() + duration);
-
             try {
-                // await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/reprogram`, {
-                //     method: 'PUT',
-                //     body: JSON.stringify({ newDateTime: newDateTimeForReprogram.toISOString() }),
-                // });
-                setAllEvents(prevEvents =>
-                    prevEvents.map(event =>
-                        event.id === selectedEvent.id
-                            ? { ...event, start: newDateTimeForReprogram.toISOString(), end: newEndDate.toISOString() }
-                            : event
-                    )
-                );
+                await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/reprogram`, {
+                    method: 'PUT', body: JSON.stringify({ newDateTime: newDateTimeForReprogram.toISOString() }),
+                });
+                await fetchAppointments(calendarRef.current?.getApi().view);
                 handleCloseDetailModal();
-            } catch (error) {
-                 console.error("Error reprogramando turno:", error.message);
-                alert(`Error reprogramando turno: ${error.message}`);
-            }
+            } catch (err) { alert(`Error reprogramando turno: ${err.message}`); }
         }
     };
 
@@ -406,31 +356,26 @@ const AppointmentsView = () => {
                     <Typography variant="h5" gutterBottom component="div" sx={{m:0}}>Mi Agenda de Turnos</Typography>
                     <Stack direction="row" spacing={1} alignItems="center">
                         <FormControl size="small" sx={{minWidth: 180}}>
-                            <InputLabel id="status-filter-label">Filtrar por Estado</InputLabel>
-                            <Select
-                                labelId="status-filter-label"
-                                value={statusFilter}
-                                label="Filtrar por Estado"
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                            >
+                            <InputLabel>Filtrar por Estado</InputLabel>
+                            <Select value={statusFilter} label="Filtrar por Estado" onChange={(e) => setStatusFilter(e.target.value)}>
                                 <MenuItem value="ALL">Todos los turnos</MenuItem>
-                                {availableStatuses.map(statusKey => (
-                                    <MenuItem key={statusKey} value={statusKey}>{statusColors[statusKey]?.label}</MenuItem>
-                                ))}
+                                {availableStatuses.map(statusKey => (<MenuItem key={statusKey} value={statusKey}>{statusColors[statusKey]?.label}</MenuItem>))}
                             </Select>
                         </FormControl>
                         <Button variant="contained" startIcon={<AddCircleOutlineIcon />} onClick={handleOpenNewAppointmentModal}>Añadir Turno</Button>
                     </Stack>
                 </Stack>
-                {apiError && <Alert severity="error" sx={{mb:2}}>{apiError}</Alert>}
-                {loadingEvents && <Box sx={{display:'flex', justifyContent:'center', my:2}}><CircularProgress/></Box>}
+                {error && <Alert severity="error" sx={{mb:2}}>{error}</Alert>}
+                {loading && <Box sx={{display:'flex', justifyContent:'center', my:2}}><CircularProgress/></Box>}
                 <FullCalendar
+                    ref={calendarRef}
                     plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
                     headerToolbar={{ left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' }}
                     initialView="timeGridWeek"
                     locale={esLocale}
                     weekends={true}
                     events={filteredEvents}
+                    datesSet={(viewInfo) => fetchAppointments(viewInfo)}
                     eventClick={handleEventClick}
                     editable={false}
                     selectable={true}
@@ -447,7 +392,7 @@ const AppointmentsView = () => {
                     eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
                     nowIndicator={true}
                 />
-
+                
                 {selectedEvent && (
                     <Modal open={openDetailModal} onClose={handleCloseDetailModal}>
                         <Box sx={modalStyle}>

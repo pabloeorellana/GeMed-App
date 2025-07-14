@@ -1,144 +1,188 @@
+// @desc    Obtener los turnos de un profesional para un rango de fechas
+// @route   GET /api/appointments
+// @access  Privado (PROFESSIONAL, ADMIN)
 export const getAppointments = async (req, res) => {
     const pool = req.dbPool;
-    const { startDate, endDate, patientId, professionalId_admin } = req.query;
-    const loggedInUserId = req.user.userId;
-    const loggedInUserRole = req.user.role;
+    const professionalUserId = req.user.userId;
+    const { startDate, endDate } = req.query; // Esperamos ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 
-    let query = `
-        SELECT 
-            a.id, a.dateTime, a.status, a.reasonForVisit, a.professionalNotes, a.patientNotes,
-            p.fullName as patientFullName, p.dni as patientDni, p.email as patientEmail, p.phone as patientPhone,
-            uProf.fullName as professionalFullName 
-        FROM Appointments a
-        JOIN Users uProf ON a.professionalUserId = uProf.id
-        LEFT JOIN Patients p ON a.patientId = p.id 
-        WHERE 1=1 
-    `; 
-
-    const queryParams = [];
-
-    if (loggedInUserRole === 'PROFESSIONAL') {
-        query += ' AND a.professionalUserId = ?';
-        queryParams.push(loggedInUserId);
-    } else if (loggedInUserRole === 'ADMIN' && professionalId_admin) {
-        query += ' AND a.professionalUserId = ?';
-        queryParams.push(professionalId_admin);
+    if (!startDate || !endDate) {
+        return res.status(400).json({ message: 'Se requieren fechas de inicio y fin.' });
     }
-
-    if (startDate) {
-        query += ' AND a.dateTime >= ?';
-        queryParams.push(new Date(startDate).toISOString().slice(0, 19).replace('T', ' '));
-    }
-    if (endDate) {
-        query += ' AND a.dateTime <= ?';
-        const endOfDay = new Date(endDate);
-        endOfDay.setHours(23, 59, 59, 999);
-        queryParams.push(endOfDay.toISOString().slice(0, 19).replace('T', ' '));
-    }
-     if (patientId) {
-        query += ' AND a.patientId = (SELECT id FROM Patients WHERE dni = ? LIMIT 1)';
-        queryParams.push(patientId);
-    }
-
-    query += ' ORDER BY a.dateTime ASC';
 
     try {
-        const [appointments] = await pool.query(query, queryParams);
-        const events = appointments.map(appt => ({
-            id: appt.id,
-            title: appt.patientFullName || 'Turno Reservado', 
-            start: new Date(appt.dateTime).toISOString(),
-            end: new Date(new Date(appt.dateTime).getTime() + 30 * 60000).toISOString(),
-            extendedProps: {
-                patientId: appt.patientId, 
-                patientDni: appt.patientDni,
-                patientEmail: appt.patientEmail,
-                patientPhone: appt.patientPhone,
-                reasonForVisit: appt.reasonForVisit,
-                status: appt.status,
-                professionalNotes: appt.professionalNotes,
-            },
-        }));
-        res.json(events);
+        // Hacemos un JOIN para obtener el nombre del paciente directamente
+        const [appointments] = await pool.query(
+            `SELECT 
+                a.id, 
+                a.dateTime AS start, 
+                DATE_ADD(a.dateTime, INTERVAL 30 MINUTE) AS end, -- Asumimos 30 min por ahora
+                p.fullName AS title,
+                a.status,
+                a.reasonForVisit,
+                a.professionalNotes,
+                a.patientId,
+                p.dni AS patientDni,
+                p.email AS patientEmail,
+                p.phone AS patientPhone
+             FROM Appointments a
+             JOIN Patients p ON a.patientId = p.id
+             WHERE a.professionalUserId = ? AND a.dateTime BETWEEN ? AND ?`,
+            [professionalUserId, `${startDate} 00:00:00`, `${endDate} 23:59:59`]
+        );
+        res.json(appointments);
     } catch (error) {
         console.error('Error en getAppointments:', error);
         res.status(500).json({ message: 'Error del servidor al obtener turnos' });
     }
 };
 
+// @desc    Crear un turno manualmente
+// @route   POST /api/appointments/manual
+// @access  Privado (PROFESSIONAL, ADMIN)
 export const createManualAppointment = async (req, res) => {
     const pool = req.dbPool;
     const professionalUserId = req.user.userId;
-    const { patientId,
-            dateTime,
-            reasonForVisit,
-           } = req.body;
+    const { patientId, dateTime, reasonForVisit } = req.body;
 
     if (!patientId || !dateTime) {
-        return res.status(400).json({ message: 'ID de paciente y fecha/hora son requeridos.' });
+        return res.status(400).json({ message: 'Se requiere paciente y fecha/hora.' });
     }
 
+    // TODO: Validación avanzada: verificar si el slot está realmente disponible
+    // (cruzar con ProfessionalAvailability, ProfessionalTimeBlocks y otros Appointments)
+
     try {
-        const appointmentDateTime = new Date(dateTime).toISOString().slice(0, 19).replace('T', ' ');
-        const newAppointmentId = `appt_${uuidv4().substring(0,12)}`; 
+        const appointmentId = `appt_${new Date().getTime()}`; // ID simple, podrías usar UUID
+        const formattedDateTime = new Date(dateTime).toISOString().slice(0, 19).replace('T', ' ');
 
-        const [result] = await pool.query(
-            'INSERT INTO Appointments (id, professionalUserId, patientId, dateTime, reasonForVisit, status) VALUES (?, ?, ?, ?, ?, ?)',
-            [newAppointmentId, professionalUserId, patientId, appointmentDateTime, reasonForVisit || null, 'SCHEDULED']
+        await pool.query(
+            'INSERT INTO Appointments (id, dateTime, patientId, professionalUserId, reasonForVisit, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [appointmentId, formattedDateTime, patientId, professionalUserId, reasonForVisit || null, 'SCHEDULED']
         );
-        
-        const [newAppt] = await pool.query('SELECT * FROM Appointments WHERE id = ?', [newAppointmentId]);
-        const patientQuery = await pool.query('SELECT * FROM Patients WHERE id = ?', [patientId]);
-        const patientData = patientQuery[0][0];
 
-        const event = {
-            id: newAppt[0].id,
-            title: patientData.fullName,
-            start: new Date(newAppt[0].dateTime).toISOString(),
-            end: new Date(new Date(newAppt[0].dateTime).getTime() + 30 * 60000).toISOString(), 
-            extendedProps: {
-                patientId: newAppt[0].patientId,
-                patientDni: patientData.dni,
-                patientEmail: patientData.email,
-                patientPhone: patientData.phone,
-                reasonForVisit: newAppt[0].reasonForVisit,
-                status: newAppt[0].status,
-                professionalNotes: newAppt[0].professionalNotes,
-            }
-        };
-        res.status(201).json(event);
+        // Devolver el turno recién creado
+        const [newAppointment] = await pool.query(`
+            SELECT a.id, a.dateTime AS start, DATE_ADD(a.dateTime, INTERVAL 30 MINUTE) AS end, p.fullName AS title, a.status, a.reasonForVisit, a.professionalNotes, a.patientId, p.dni AS patientDni, p.email AS patientEmail, p.phone AS patientPhone
+            FROM Appointments a JOIN Patients p ON a.patientId = p.id WHERE a.id = ?`,
+            [appointmentId]
+        );
 
+        res.status(201).json(newAppointment[0]);
     } catch (error) {
         console.error('Error en createManualAppointment:', error);
         if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(400).json({ message: 'Ya existe un turno para este profesional en la fecha y hora seleccionadas.' });
+            return res.status(400).json({ message: 'Ya existe un turno en este horario.' });
         }
         res.status(500).json({ message: 'Error del servidor al crear el turno' });
     }
 };
 
+// @desc    Actualizar el estado de un turno
+// @route   PUT /api/appointments/:id/status
+// @access  Privado (PROFESSIONAL, ADMIN)
 export const updateAppointmentStatus = async (req, res) => {
     const pool = req.dbPool;
-    const { appointmentId } = req.params;
+    const { id: appointmentId } = req.params;
     const { status } = req.body;
-    const professionalUserId = req.user.userId; 
+    const professionalUserId = req.user.userId;
 
-    if (!status || !availableStatuses.includes(status.toUpperCase())) { 
-        return res.status(400).json({ message: 'Estado inválido proporcionado.' });
+    if (!status) {
+        return res.status(400).json({ message: 'Se requiere un estado.' });
     }
+    // TODO: Validar que 'status' sea uno de los valores permitidos
 
     try {
         const [result] = await pool.query(
             'UPDATE Appointments SET status = ? WHERE id = ? AND professionalUserId = ?',
-            [status.toUpperCase(), appointmentId, professionalUserId]
+            [status, appointmentId, professionalUserId]
         );
-        if (result.affectedRows > 0) {
-            res.json({ message: 'Estado del turno actualizado.' });
-        } else {
-            res.status(404).json({ message: 'Turno no encontrado o no autorizado para modificar.' });
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Turno no encontrado o no autorizado.' });
         }
+        res.json({ message: 'Estado del turno actualizado.' });
     } catch (error) {
         console.error('Error en updateAppointmentStatus:', error);
-        res.status(500).json({ message: 'Error del servidor al actualizar estado del turno.' });
+        res.status(500).json({ message: 'Error del servidor al actualizar estado.' });
+    }
+};
+
+// @desc    Reprogramar un turno
+// @route   PUT /api/appointments/:id/reprogram
+// @access  Privado (PROFESSIONAL, ADMIN)
+export const reprogramAppointment = async (req, res) => {
+    const pool = req.dbPool;
+    const { id: appointmentId } = req.params;
+    const { newDateTime } = req.body;
+    const professionalUserId = req.user.userId;
+
+    if (!newDateTime) {
+        return res.status(400).json({ message: 'Se requiere una nueva fecha y hora.' });
+    }
+    
+    const formattedNewDateTime = new Date(newDateTime).toISOString().slice(0, 19).replace('T', ' ');
+
+    try {
+        const [result] = await pool.query(
+            'UPDATE Appointments SET dateTime = ? WHERE id = ? AND professionalUserId = ?',
+            [formattedNewDateTime, appointmentId, professionalUserId]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Turno no encontrado o no autorizado.' });
+        }
+        res.json({ message: 'Turno reprogramado.' });
+    } catch (error) {
+        console.error('Error en reprogramAppointment:', error);
+         if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ message: 'Ya existe un turno en el nuevo horario seleccionado.' });
+        }
+        res.status(500).json({ message: 'Error del servidor al reprogramar.' });
+    }
+};
+
+// @desc    Eliminar un turno
+// @route   DELETE /api/appointments/:id
+// @access  Privado (PROFESSIONAL, ADMIN)
+export const deleteAppointment = async (req, res) => {
+    const pool = req.dbPool;
+    const { id: appointmentId } = req.params;
+    const professionalUserId = req.user.userId;
+
+    try {
+        const [result] = await pool.query(
+            'DELETE FROM Appointments WHERE id = ? AND professionalUserId = ?',
+            [appointmentId, professionalUserId]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Turno no encontrado o no autorizado.' });
+        }
+        res.json({ message: 'Turno eliminado.' });
+    } catch (error) {
+        console.error('Error en deleteAppointment:', error);
+        res.status(500).json({ message: 'Error del servidor al eliminar turno.' });
+    }
+};
+
+// @desc    Guardar notas del profesional en un turno
+// @route   PUT /api/appointments/:id/notes
+// @access  Privado (PROFESSIONAL)
+export const updateProfessionalNotes = async (req, res) => {
+    const pool = req.dbPool;
+    const { id: appointmentId } = req.params;
+    const { professionalNotes } = req.body;
+    const professionalUserId = req.user.userId;
+
+    try {
+         const [result] = await pool.query(
+            'UPDATE Appointments SET professionalNotes = ? WHERE id = ? AND professionalUserId = ?',
+            [professionalNotes, appointmentId, professionalUserId]
+        );
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Turno no encontrado o no autorizado.' });
+        }
+        res.json({ message: 'Notas guardadas.' });
+    } catch(error) {
+        console.error('Error en updateProfessionalNotes:', error);
+        res.status(500).json({ message: 'Error del servidor al guardar notas.' });
     }
 };
