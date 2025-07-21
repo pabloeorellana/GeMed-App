@@ -1,3 +1,4 @@
+// src/pages/ProfessionalDashboardPage/views/AppointmentsView.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import authFetch from '../../../utils/authFetch';
 import {
@@ -21,27 +22,6 @@ import { es as fnsEsLocale } from 'date-fns/locale';
 import { LocalizationProvider, DateTimePicker, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
-const mockAppointments = [
-    {
-        id: 'appt_1', title: 'Ana Pérez', start: new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().replace(/T.*$/, '') + 'T10:00:00',
-        end: new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().replace(/T.*$/, '') + 'T10:30:00',
-        extendedProps: { patientId: 'patient_123', patientDni: '12345678A', patientEmail: 'ana.perez@example.com', patientPhone: '+549111234567', reasonForVisit: 'Control anual y ajuste de dieta.', status: 'SCHEDULED', professionalNotes: 'Revisar últimos análisis.' },
-        backgroundColor: '#3f51b5', borderColor: '#3f51b5'
-    },
-    {
-        id: 'appt_2', title: 'Carlos López', start: new Date(new Date().setDate(new Date().getDate() + 2)).toISOString().replace(/T.*$/, '') + 'T14:30:00',
-        end: new Date(new Date().setDate(new Date().getDate() + 2)).toISOString().replace(/T.*$/, '') + 'T15:00:00',
-        extendedProps: { patientId: 'patient_456', patientDni: '87654321B', patientEmail: 'carlos.lopez@example.com', patientPhone: '+549117654321', reasonForVisit: 'Seguimiento rendimiento deportivo.', status: 'COMPLETED', professionalNotes: 'Excelente progreso.' },
-        backgroundColor: '#4caf50', borderColor: '#4caf50'
-    },
-];
-
-const mockExistingPatientsDataForInitialState = [
-    { id: 'patient_123', dni: '12345678A', firstName: 'Ana', lastName: 'Pérez', fullName: 'Ana Pérez', email: 'ana.perez@example.com', phone: '+549111234567', birthDate: '1990-05-15' },
-    { id: 'patient_456', dni: '87654321B', firstName: 'Carlos', lastName: 'López', fullName: 'Carlos López', email: 'carlos.lopez@example.com', phone: '+549117654321', birthDate: '1985-11-20' },
-    { id: 'patient_789', dni: '11223344C', firstName: 'Laura', lastName: 'Gómez', fullName: 'Laura Gómez', email: 'laura.gomez@example.com', phone: '+549118877665', birthDate: '1995-02-10' },
-];
-
 const statusColors = {
     SCHEDULED: { backgroundColor: '#3f51b5', color: 'white', label: 'Programado' },
     CONFIRMED: { backgroundColor: '#1976d2', color: 'white', label: 'Confirmado' },
@@ -61,7 +41,7 @@ const initialNewAppointmentState = { patient: null, dateTime: null, reasonForVis
 const initialNewPatientFormDataState = { dni: '', lastName: '', firstName: '', email: '', phone: '', birthDate: null };
 
 const AppointmentsView = () => {
-    const [existingPatients, setExistingPatients] = useState(mockExistingPatientsDataForInitialState);
+    const [existingPatients, setExistingPatients] = useState([]);
     const [allEvents, setAllEvents] = useState([]);
     const [filteredEvents, setFilteredEvents] = useState([]);
     const [selectedEvent, setSelectedEvent] = useState(null);
@@ -102,11 +82,17 @@ const AppointmentsView = () => {
             const data = await authFetch(`http://localhost:3001/api/appointments?startDate=${startDate}&endDate=${endDate}`);
             const appointmentsData = Array.isArray(data) ? data : [];
             const formattedEvents = appointmentsData.map(appt => ({
-                id: String(appt.id), title: appt.title, start: appt.start, end: appt.end,
+                id: String(appt.id),
+                title: appt.title,
+                start: appt.start,
+                end: appt.end,
                 extendedProps: {
-                    status: appt.status, reasonForVisit: appt.reasonForVisit,
-                    professionalNotes: appt.professionalNotes || '', patientId: appt.patientId,
-                    patientDni: appt.patientDni, patientEmail: appt.patientEmail,
+                    status: appt.status,
+                    reasonForVisit: appt.reasonForVisit,
+                    professionalNotes: appt.professionalNotes || '',
+                    patientId: appt.patientId,
+                    patientDni: appt.patientDni,
+                    patientEmail: appt.patientEmail,
                     patientPhone: appt.patientPhone
                 },
                 backgroundColor: statusColors[appt.status]?.backgroundColor || '#757575',
@@ -338,12 +324,30 @@ const AppointmentsView = () => {
                     return;
                 }
             }
-
             try {
                 await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/reprogram`, {
                     method: 'PUT', body: JSON.stringify({ newDateTime: newDateTimeForReprogram.toISOString() }),
                 });
-                await fetchAppointments(calendarRef.current?.getApi().view);
+
+                const calendarApi = calendarRef.current.getApi();
+                const eventToUpdate = calendarApi.getEventById(selectedEvent.id);
+                const duration = parseISO(selectedEvent.end).getTime() - parseISO(selectedEvent.start).getTime();
+
+                if (eventToUpdate) {
+                    const newEndDate = new Date(newDateTimeForReprogram.getTime() + duration);
+                    
+                    eventToUpdate.setStart(newDateTimeForReprogram);
+                    eventToUpdate.setEnd(newEndDate);
+                }
+                
+                setAllEvents(prevEvents =>
+                    prevEvents.map(event =>
+                        event.id === selectedEvent.id
+                            ? { ...event, start: newDateTimeForReprogram.toISOString(), end: new Date(newDateTimeForReprogram.getTime() + duration).toISOString() }
+                            : event
+                    )
+                );
+
                 handleCloseDetailModal();
             } catch (err) { alert(`Error reprogramando turno: ${err.message}`); }
         }

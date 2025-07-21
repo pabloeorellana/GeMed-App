@@ -1,3 +1,4 @@
+// server.js
 import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
@@ -8,6 +9,9 @@ import userRoutes from './routes/userRoutes.js';
 import availabilityRoutes from './routes/availabilityRoutes.js';
 import patientRoutes from './routes/patientRoutes.js';
 import appointmentRoutes from './routes/appointmentRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
+import clinicalRecordRoutes from './routes/clinicalRecordRoutes.js';
+import statisticsRoutes from './routes/statisticsRoutes.js'
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,7 +40,8 @@ const dbConfig = {
     database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    timezone: '+00:00'
 };
 
 let pool;
@@ -53,38 +58,31 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use('/api/appointments', appointmentRoutes);
-
 // --- Definición de Rutas ---
 
-//app.use('/api/auth', authRoutes); // Asumiendo que mueves el login a su propio archivo de rutas
-app.use('/api/users', userRoutes);
-app.use('/api/availability', availabilityRoutes);
-app.use('/api/patients', patientRoutes); // <<<--- USAR LAS RUTAS DE PACIENTES
+// Rutas Públicas
+app.use('/api/public', publicRoutes);
+app.use('/api/patients', patientRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/statistics', statisticsRoutes);
 
 app.post('/api/auth/login', async (req, res) => {
-    console.log('BACKEND LOGIN: Solicitud recibida en /api/auth/login');
     const { dni, password } = req.body;
     const currentPool = req.dbPool;
 
     if (!dni || !password) {
-        console.log('BACKEND LOGIN: DNI o contraseña faltantes');
         return res.status(400).json({ message: 'DNI y contraseña son requeridos.' });
     }
 
     try {
-        console.log('BACKEND LOGIN: Buscando usuario por DNI:', dni);
         const [users] = await currentPool.query('SELECT * FROM Users WHERE dni = ? AND isActive = TRUE', [dni]);
         
         if (users.length === 0) {
-            console.log('BACKEND LOGIN: Usuario no encontrado o inactivo para DNI:', dni);
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
         const user = users[0];
-        console.log('BACKEND LOGIN: Usuario encontrado, comparando contraseña...');
         const isMatch = await bcrypt.compare(password, user.passwordHash);
-        console.log('BACKEND LOGIN: Contraseña coincide:', isMatch);
 
         if (!isMatch) {
             return res.status(401).json({ message: 'Credenciales inválidas.' });
@@ -99,7 +97,6 @@ app.post('/api/auth/login', async (req, res) => {
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
         await currentPool.query('UPDATE Users SET lastLogin = NOW() WHERE id = ?', [user.id]);
         
-        console.log('BACKEND LOGIN: Enviando respuesta exitosa');
         res.json({
             token,
             user: {
@@ -117,17 +114,22 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// Rutas Protegidas
 app.use('/api/users', userRoutes);
 app.use('/api/availability', availabilityRoutes);
-
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
-});
-
+app.use('/api/patients', patientRoutes);
+app.use('/api/clinical-records', clinicalRecordRoutes);
+app.use('/api/appointments', appointmentRoutes);
 app.get('/api/professional/data', protect, authorize('PROFESSIONAL'), (req, res) => {
     res.json({ message: `Bienvenido Profesional ${req.user.fullName}! Tus datos específicos están aquí.`});
 });
 
+// Ruta Pública de Health Check
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
+});
+
+// Manejador de Errores Global
 app.use((err, req, res, next) => {
     console.error('ERROR GLOBAL:', err.stack);
     res.status(500).send('¡Algo salió mal en el servidor!');

@@ -21,25 +21,9 @@ import { es } from 'date-fns/locale';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
-// Mantener esto por ahora para la lógica de HC
-const mockClinicalRecordsData = {
-    'patient_123': [
-        { id: 'cr_1', date: new Date(2024, 4, 10, 10, 30).toISOString(), updatedAt: new Date(2024, 4, 11, 9, 0).toISOString(), title: 'Control Anual', content: 'Paciente refiere sentirse bien. Se ajusta dieta levemente. Próximo control en 6 meses. Paciente refiere sentirse bien. Se ajusta dieta levemente. Próximo control en 6 meses. Paciente refiere sentirse bien. Se ajusta dieta levemente. Próximo control en 6 meses. Paciente refiere sentirse bien. Se ajusta dieta levemente. Próximo control en 6 meses.', professionalId: 'prof_default_01', pathology: 'Sobrepeso y Obesidad', attachmentName: 'estudios_ana.pdf' },
-        { id: 'cr_2', date: new Date(2023, 10, 5, 11, 0).toISOString(), updatedAt: new Date(2023, 10, 5, 11, 0).toISOString(), title: 'Consulta por Alergia', content: 'Presenta síntomas de alergia primaveral. Se deriva a especialista.', professionalId: 'prof_default_01', pathology: '', attachmentName: '' },
-    ],
-    'patient_456': [
-        { id: 'cr_3', date: new Date(2024, 3, 20, 15, 0).toISOString(), updatedAt: new Date(2024, 3, 20, 15, 0).toISOString(), title: 'Seguimiento Deportivo', content: 'Aumento de masa muscular según plan. Continuar con suplementación indicada.', professionalId: 'prof_default_01', pathology: 'Otros', attachmentName: '' },
-    ],
-};
 const initialNewPatientState = { dni: '', lastName: '', firstName: '', email: '', phone: '', birthDate: null };
 const initialClinicalRecordState = { id: null, title: '', content: '', pathology: '', attachment: null, attachmentName: '' };
-
-const pathologiesList = [
-    "Sobrepeso y Obesidad", "Diabetes Mellitus Tipo 2", "Enfermedades Cardiovasculares",
-    "Hipertensión Arterial", "Caries Dental", "Anemia por deficiencia de hierro",
-    "Deficiencia de Vitamina D", "Deficiencia de Yodo", "Anorexia Nerviosa",
-    "Bulimia Nerviosa", "Otros"
-];
+const pathologiesList = [ "Sobrepeso y Obesidad", "Diabetes Mellitus Tipo 2", "Enfermedades Cardiovasculares", "Hipertensión Arterial", "Caries Dental", "Anemia por deficiencia de hierro", "Deficiencia de Vitamina D", "Deficiencia de Yodo", "Anorexia Nerviosa", "Bulimia Nerviosa", "Otros" ];
 
 const PatientsView = () => {
     const [patients, setPatients] = useState([]);
@@ -75,6 +59,7 @@ const PatientsView = () => {
         return name.substring(0, 2).toUpperCase();
     };
 
+    // CORRECCIÓN: fetchPatients ahora procesa los datos para asegurar que fullName exista.
     const fetchPatients = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -82,13 +67,10 @@ const PatientsView = () => {
             const data = await authFetch('http://localhost:3001/api/patients');
             const processedData = (data || []).map(p => ({
                 ...p,
-                firstName: p.firstName || '',
-                lastName: p.lastName || '',
-                fullName: p.fullName || `${p.firstName || ''} ${p.lastName || ''}`.trim(),
+                fullName: p.fullName || `${p.firstName || ''} ${p.lastName || ''}`.trim()
             }));
             setPatients(processedData);
         } catch (err) {
-            console.error("Error cargando pacientes:", err);
             setError(err.message || "Error al cargar los pacientes.");
         } finally {
             setLoading(false);
@@ -99,26 +81,30 @@ const PatientsView = () => {
         fetchPatients();
     }, [fetchPatients]);
 
+    const fetchClinicalRecords = useCallback(async (patientId) => {
+        setLoadingRecords(true);
+        setError(null);
+        try {
+            const records = await authFetch(`http://localhost:3001/api/patients/${patientId}/clinical-records`);
+            setClinicalRecords(records.sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate)) || []);
+        } catch (err) {
+            setError(err.message || "Error al cargar la historia clínica.");
+        } finally {
+            setLoadingRecords(false);
+        }
+    }, []);
+
     useEffect(() => {
-        if (selectedPatient) {
-            setLoadingRecords(true);
-            setTimeout(() => {
-                const records = mockClinicalRecordsData[selectedPatient.id] || [];
-                setClinicalRecords(records.sort((a, b) => new Date(b.date) - new Date(a.date)));
-                setLoadingRecords(false);
-            }, 500);
+        if (selectedPatient?.id) {
+            fetchClinicalRecords(selectedPatient.id);
         } else {
             setClinicalRecords([]);
         }
-    }, [selectedPatient]);
+    }, [selectedPatient, fetchClinicalRecords]);
 
     const filteredPatients = useMemo(() => {
         if (!searchTerm) return patients;
-        return patients.filter(p =>
-            p.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.dni.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
+        return patients.filter(p => p.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || p.dni.toLowerCase().includes(searchTerm.toLowerCase()) || (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase())));
     }, [patients, searchTerm]);
 
     const handleSelectPatient = (patient) => setSelectedPatient(patient);
@@ -126,11 +112,7 @@ const PatientsView = () => {
 
     const handleOpenRecordFormModal = (recordToEdit = null) => {
         if (recordToEdit) {
-            setCurrentRecordForm({
-                id: recordToEdit.id, title: recordToEdit.title || '', content: recordToEdit.content,
-                pathology: recordToEdit.pathology || '', attachment: null,
-                attachmentName: recordToEdit.attachmentName || ''
-            });
+            setCurrentRecordForm({ id: recordToEdit.id, title: recordToEdit.title || '', content: recordToEdit.content, pathology: recordToEdit.pathology || '', attachment: null, attachmentName: recordToEdit.attachmentName || '' });
             setIsEditingRecordForm(true);
         } else {
             setCurrentRecordForm(initialClinicalRecordState);
@@ -138,7 +120,6 @@ const PatientsView = () => {
         }
         setOpenRecordFormModal(true);
     };
-
     const handleCloseRecordFormModal = () => {
         setOpenRecordFormModal(false);
         setCurrentRecordForm(initialClinicalRecordState);
@@ -154,21 +135,20 @@ const PatientsView = () => {
             setCurrentRecordForm(prev => ({ ...prev, attachment: file, attachmentName: file.name }));
         }
     };
-    const handleSaveRecord = () => {
-        if (isEditingRecordForm) {
-            setClinicalRecords(prev => prev.map(r => r.id === currentRecordForm.id ? {...r, ...currentRecordForm, updatedAt: new Date().toISOString(), attachment: null } : r)
-                .sort((a,b) => new Date(b.date) - new Date(a.date))
-            );
-        } else {
-            const newRecord = {
-                id: `cr_${Date.now()}`, date: new Date().toISOString(), updatedAt: new Date().toISOString(),
-                ...currentRecordForm, attachment: null, professionalId: 'prof_default_01'
-            };
-            setClinicalRecords(prev => [newRecord, ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+    const handleSaveRecord = async () => {
+        try {
+            if (isEditingRecordForm) {
+                await authFetch(`http://localhost:3001/api/clinical-records/${currentRecordForm.id}`, { method: 'PUT', body: JSON.stringify(currentRecordForm) });
+            } else {
+                await authFetch(`http://localhost:3001/api/patients/${selectedPatient.id}/clinical-records`, { method: 'POST', body: JSON.stringify(currentRecordForm) });
+            }
+            fetchClinicalRecords(selectedPatient.id);
+            handleCloseRecordFormModal();
+        } catch(err) {
+            alert(`Error guardando la entrada: ${err.message}`);
         }
-        handleCloseRecordFormModal();
     };
-
+    
     const handleDeleteRecordRequest = (recordId) => {
         setRecordToDeleteId(recordId);
         setOpenDeleteConfirmModal(true);
@@ -177,18 +157,21 @@ const PatientsView = () => {
         setOpenDeleteConfirmModal(false);
         setRecordToDeleteId(null);
     };
-    const handleConfirmDeleteRecord = () => {
+    const handleConfirmDeleteRecord = async () => {
         if (recordToDeleteId) {
-            setClinicalRecords(prev => prev.filter(r => r.id !== recordToDeleteId));
+            try {
+                await authFetch(`http://localhost:3001/api/clinical-records/${recordToDeleteId}`, { method: 'DELETE' });
+                setClinicalRecords(prev => prev.filter(r => r.id !== recordToDeleteId));
+            } catch (err) {
+                alert(`Error eliminando la entrada: ${err.message}`);
+            }
         }
         handleCloseDeleteConfirmModal();
     };
 
     const handleOpenAddPatientModal = () => setOpenAddPatientModal(true);
     const handleCloseAddPatientModal = () => {
-        setOpenAddPatientModal(false);
-        setNewPatientData(initialNewPatientState);
-        setNewPatientErrors({});
+        setOpenAddPatientModal(false); setNewPatientData(initialNewPatientState); setNewPatientErrors({});
     };
     const handleNewPatientChange = (event) => {
         const { name, value } = event.target;
@@ -209,38 +192,29 @@ const PatientsView = () => {
         setNewPatientErrors(errors);
         return Object.keys(errors).length === 0;
     };
+
     const handleSaveNewPatient = async () => {
         if (!validateNewPatientForm()) return;
         try {
-            const newPatientPayload = {
-                ...newPatientData,
-                birthDate: newPatientData.birthDate ? format(newPatientData.birthDate, 'yyyy-MM-dd') : null,
-            };
-            const savedPatient = await authFetch('http://localhost:3001/api/patients', {
-                method: 'POST',
-                body: JSON.stringify(newPatientPayload),
-            });
-            await fetchPatients();
+            const newPatientPayload = { ...newPatientData, birthDate: newPatientData.birthDate ? format(newPatientData.birthDate, 'yyyy-MM-dd') : null };
+            // CORRECCIÓN: No necesitamos 'savedPatient' aquí, ya que fetchPatients recargará todo.
+            await authFetch('http://localhost:3001/api/patients', { method: 'POST', body: JSON.stringify(newPatientPayload) });
+            fetchPatients(); // Vuelve a cargar la lista completa desde el servidor.
             handleCloseAddPatientModal();
         } catch (err) {
-            console.error("Error guardando nuevo paciente:", err);
             setNewPatientErrors(prev => ({ ...prev, form: err.message }));
         }
     };
-
+    
     const handleOpenEditPatientModal = () => {
         if (selectedPatient) {
             setEditingPatientData({
-                id: selectedPatient.id,
-                dni: selectedPatient.dni,
-                lastName: selectedPatient.lastName || '',
-                firstName: selectedPatient.firstName || '',
-                email: selectedPatient.email,
+                id: selectedPatient.id, dni: selectedPatient.dni, lastName: selectedPatient.lastName || '',
+                firstName: selectedPatient.firstName || '', email: selectedPatient.email,
                 phone: selectedPatient.phone || '',
                 birthDate: selectedPatient.birthDate ? parseISO(selectedPatient.birthDate) : null,
             });
-            setEditingPatientErrors({});
-            setOpenEditPatientModal(true);
+            setEditingPatientErrors({}); setOpenEditPatientModal(true);
         }
     };
     const handleCloseEditPatientModal = () => {
@@ -267,27 +241,19 @@ const PatientsView = () => {
         setEditingPatientErrors(errors);
         return Object.keys(errors).length === 0;
     };
+    
     const handleSaveEditedPatient = async () => {
         if (!validateEditingPatientForm() || !editingPatientData) return;
         try {
-            const updatedPatientPayload = {
-                ...editingPatientData,
-                birthDate: editingPatientData.birthDate ? format(editingPatientData.birthDate, 'yyyy-MM-dd') : null,
-            };
-            const updatedPatient = await authFetch(`http://localhost:3001/api/patients/${editingPatientData.id}`, {
-                method: 'PUT',
-                body: JSON.stringify(updatedPatientPayload),
-            });
-            const updatedPatientWithFullName = {
-                ...updatedPatient,
-                fullName: `${updatedPatient.firstName || ''} ${updatedPatient.lastName || ''}`.trim()
-            };
-            const updatedPatients = patients.map(p => p.id === updatedPatient.id ? updatedPatientWithFullName : p);
-            setPatients(updatedPatients);
-            setSelectedPatient(updatedPatientWithFullName);
+            const updatedPatientPayload = { ...editingPatientData, birthDate: editingPatientData.birthDate ? format(editingPatientData.birthDate, 'yyyy-MM-dd') : null };
+            // CORRECCIÓN: No necesitamos 'updatedPatient' aquí, ya que fetchPatients recargará todo.
+            await authFetch(`http://localhost:3001/api/patients/${editingPatientData.id}`, { method: 'PUT', body: JSON.stringify(updatedPatientPayload) });
+            // CORRECCIÓN: Llamar a fetchPatients() para asegurar consistencia.
+            await fetchPatients();
+            // CORRECCIÓN: Actualizar selectedPatient desde la nueva lista para reflejar los cambios.
+            setSelectedPatient(prev => ({ ...prev, ...updatedPatientPayload, fullName: `${updatedPatientPayload.firstName} ${updatedPatientPayload.lastName}`.trim() }));
             handleCloseEditPatientModal();
         } catch (err) {
-            console.error("Error actualizando paciente:", err);
             setEditingPatientErrors(prev => ({ ...prev, form: err.message }));
         }
     };
@@ -301,16 +267,8 @@ const PatientsView = () => {
         setRecordToView(null);
     };
 
-    if (loading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}>
-                <CircularProgress />
-            </Box>
-        );
-    }
-    if (error) {
-        return <Alert severity="error" sx={{m: 2}}>{error}</Alert>
-    }
+    if (loading) { return ( <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box> ); }
+    if (error) { return <Alert severity="error" sx={{m: 2}}>{error}</Alert> }
 
     if (selectedPatient) {
         return (
@@ -352,8 +310,8 @@ const PatientsView = () => {
                                             </Box>
                                         </Box>
                                         <Typography component="div" variant="caption" sx={{ color: 'text.secondary', mb: 0.5 }}>
-                                            Creado: {format(parseISO(record.date), "dd/MM/yy HH:mm", { locale: es })}
-                                            {record.updatedAt && record.date !== record.updatedAt && ` (Modif.: ${format(parseISO(record.updatedAt), "dd/MM/yy HH:mm", { locale: es })})`}
+                                            Creado: {format(parseISO(record.entryDate), "dd/MM/yy HH:mm", { locale: es })}
+                                            {record.updatedAt && record.entryDate !== record.updatedAt && ` (Modif.: ${format(parseISO(record.updatedAt), "dd/MM/yy HH:mm", { locale: es })})`}
                                         </Typography>
                                         {record.pathology && (<Typography component="div" variant="caption" sx={{ color: 'info.main', mb: 0.5 }}>Patología: {record.pathology}</Typography>)}
                                         <Typography component="div" variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', mb: record.attachmentName ? 0.5 : 0 }}>{record.content}</Typography>
@@ -368,9 +326,7 @@ const PatientsView = () => {
                         <DialogTitle>{isEditingRecordForm ? 'Editar Entrada de HC' : 'Nueva Entrada en Historia Clínica'}</DialogTitle>
                         <DialogContent>
                             <Grid container spacing={2} direction="column" sx={{pt:1}}>
-                                <Grid item xs={12}>
-                                    <TextField autoFocus margin="dense" name="title" label="Motivo de la consulta/Asunto" type="text" fullWidth variant="outlined" value={currentRecordForm.title} onChange={handleRecordInputChange}/>
-                                </Grid>
+                                <Grid item xs={12}><TextField autoFocus margin="dense" name="title" label="Motivo de la consulta/Asunto" type="text" fullWidth variant="outlined" value={currentRecordForm.title} onChange={handleRecordInputChange}/></Grid>
                                 <Grid item xs={12}>
                                     <FormControl fullWidth margin="dense">
                                         <InputLabel id="pathology-select-label">Patología Asociada (Opcional)</InputLabel>
@@ -380,9 +336,7 @@ const PatientsView = () => {
                                         </Select>
                                     </FormControl>
                                 </Grid>
-                                <Grid item xs={12}>
-                                    <TextField margin="dense" name="content" label="Detalles" type="text" fullWidth multiline rows={8} variant="outlined" value={currentRecordForm.content} onChange={handleRecordInputChange} required />
-                                </Grid>
+                                <Grid item xs={12}><TextField margin="dense" name="content" label="Detalles" type="text" fullWidth multiline rows={8} variant="outlined" value={currentRecordForm.content} onChange={handleRecordInputChange} required /></Grid>
                                 <Grid item xs={12}>
                                     <Button variant="outlined" component="label" startIcon={<AttachFileIcon />} fullWidth sx={{textTransform: 'none', mt:1}}>
                                         Adjuntar Archivo (PDF, Imagen)
@@ -402,8 +356,8 @@ const PatientsView = () => {
                             <DialogTitle>Detalle de Entrada de Historia Clínica</DialogTitle>
                             <DialogContent dividers>
                                 <Typography variant="h6" gutterBottom>{recordToView.title || "Entrada sin título"}</Typography>
-                                <Typography variant="caption" display="block" color="text.secondary">Creado: {format(parseISO(recordToView.date), "PPPPp", { locale: es })}</Typography>
-                                {recordToView.updatedAt && recordToView.date !== recordToView.updatedAt && (<Typography variant="caption" display="block" color="text.secondary">Última Modificación: {format(parseISO(recordToView.updatedAt), "PPPPp", { locale: es })}</Typography>)}
+                                <Typography variant="caption" display="block" color="text.secondary">Creado: {format(parseISO(recordToView.entryDate), "PPPPp", { locale: es })}</Typography>
+                                {recordToView.updatedAt && recordToView.entryDate !== recordToView.updatedAt && (<Typography variant="caption" display="block" color="text.secondary">Última Modificación: {format(parseISO(recordToView.updatedAt), "PPPPp", { locale: es })}</Typography>)}
                                 {recordToView.pathology && (<Typography variant="subtitle1" sx={{mt:2, mb:1, color: 'info.main'}}>Patología Asociada: {recordToView.pathology}</Typography>)}
                                 <Typography variant="body1" sx={{mt:2, whiteSpace: 'pre-wrap'}}>{recordToView.content}</Typography>
                                 {recordToView.attachmentName && (<Box mt={2}><Typography variant="subtitle2" gutterBottom>Archivo Adjunto:</Typography><Chip icon={<AttachFileIcon />} label={recordToView.attachmentName} component="a" href="#" target="_blank" clickable variant="outlined"/></Box>)}
@@ -437,6 +391,7 @@ const PatientsView = () => {
                                         />
                                     </Grid>
                                 </Grid>
+                                {editingPatientErrors.form && <Alert severity="error" sx={{mt:2}}>{editingPatientErrors.form}</Alert>}
                             </DialogContent>
                             <DialogActions sx={{p: '16px 24px', justifyContent: 'space-between'}}>
                                 <Button onClick={handleCloseEditPatientModal} color="inherit">Cancelar</Button>
@@ -475,7 +430,8 @@ const PatientsView = () => {
                 </Box>
                 <TextField fullWidth label="Buscar paciente por Nombre, Apellido, DNI o Email" variant="outlined" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ mb: 2 }}/>
                 {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}><CircularProgress /></Box> :
-                 filteredPatients.length === 0 && !searchTerm ? <Typography color="text.secondary" sx={{textAlign: 'center', my: 3}}>Aún no tienes pacientes registrados.</Typography> :
+                 error ? <Alert severity="error">{error}</Alert> :
+                 filteredPatients.length === 0 && !searchTerm ? <Typography color="text.secondary" sx={{textAlign: 'center', my: 3}}>Aún no tienes pacientes asociados.</Typography> :
                  filteredPatients.length === 0 && searchTerm ? <Typography color="text.secondary" sx={{textAlign: 'center', my: 3}}>No se encontraron pacientes con "{searchTerm}".</Typography> :
                 <List>
                     {filteredPatients.map(patient => (
@@ -520,6 +476,7 @@ const PatientsView = () => {
                             />
                         </Grid>
                     </Grid>
+                     {newPatientErrors.form && <Alert severity="error" sx={{mt:2}}>{newPatientErrors.form}</Alert>}
                 </DialogContent>
                 <DialogActions sx={{p: '16px 24px', justifyContent: 'space-between'}}>
                     <Button onClick={handleCloseAddPatientModal} color="inherit">Cancelar</Button>

@@ -8,26 +8,18 @@ export const getPatients = async (req, res) => {
     const professionalUserId = req.user.userId; // Del token JWT
 
     try {
-        // Obtenemos los IDs de los pacientes que tienen al menos un turno con este profesional
-        // Usamos DISTINCT para no repetir pacientes
-        const [patientIds] = await pool.query(
-            'SELECT DISTINCT patientId FROM Appointments WHERE professionalUserId = ?',
-            [professionalUserId]
-        );
-
-        if (patientIds.length === 0) {
-            return res.json([]); // Devolver un array vacío si no hay pacientes
-        }
-
-        // Crear una lista de placeholders (?) para la cláusula IN
-        const placeholders = patientIds.map(() => '?').join(',');
-        const ids = patientIds.map(p => p.patientId);
-
-        // Obtener los datos completos de esos pacientes
-        const [patients] = await pool.query(
-            `SELECT id, dni, fullName, email, phone, birthDate FROM Patients WHERE id IN (${placeholders}) ORDER BY fullName ASC`,
-            ids
-        );
+        // Unir ambas condiciones:
+        // 1. Pacientes que el profesional creó.
+        // 2. Pacientes que tienen un turno con el profesional (y que quizás no creó él).
+        const query = `
+            SELECT p.id, p.dni, p.fullName, p.firstName, p.lastName, p.email, p.phone, p.birthDate
+            FROM Patients p
+            LEFT JOIN Appointments a ON p.id = a.patientId
+            WHERE a.professionalUserId = ? OR p.createdByProfessionalId = ?
+            GROUP BY p.id
+            ORDER BY p.fullName ASC
+        `;
+        const [patients] = await pool.query(query, [professionalUserId, professionalUserId]);
         
         res.json(patients);
     } catch (error) {
@@ -40,11 +32,21 @@ export const getPatients = async (req, res) => {
 // @route   POST /api/patients
 // @access  Privado (PROFESSIONAL, ADMIN)
 export const createPatient = async (req, res) => {
-    const pool = req.dbPool;
+    console.log('--- INICIO: createPatient ---');
+    let pool = req.dbPool;
+    const createdByProfessionalId = req.user?.userId; // Obtener el ID del profesional logueado
+    console.log('Datos recibidos en body:', req.body); // LOG 2
+    console.log('ID del profesional que crea:', createdByProfessionalId); //LOG3
+    if (!createdByProfessionalId) {
+        console.error('Error: No se encontró el ID del profesional en el token.');
+        return res.status(401).json({ message: 'No autorizado: token inválido o sin ID de usuario.' });
+        }
+
     const { dni, firstName, lastName, email, phone, birthDate } = req.body;
 
     // Validación básica
     if (!dni || !firstName || !lastName || !email) {
+        console.log('Validación fallida: Faltan campos requeridos.'); // LOG 4
         return res.status(400).json({ message: 'DNI, nombre, apellido y email son requeridos.' });
     }
 
@@ -52,6 +54,7 @@ export const createPatient = async (req, res) => {
         // Verificar si el DNI ya existe
         const [existing] = await pool.query('SELECT id FROM Patients WHERE dni = ?', [dni]);
         if (existing.length > 0) {
+            console.log('Error: El DNI ya existe.'); // LOG 6
             return res.status(400).json({ message: `El paciente con DNI ${dni} ya existe.` });
         }
 
@@ -59,15 +62,17 @@ export const createPatient = async (req, res) => {
         // Formatear birthDate si viene como un objeto Date o string ISO
         const formattedBirthDate = birthDate ? new Date(birthDate).toISOString().slice(0, 10) : null;
 
+        console.log('Intentando INSERT en la base de datos...'); //LOG7 
         const [result] = await pool.query(
-            'INSERT INTO Patients (dni, fullName, firstName, lastName, email, phone, birthDate) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [dni, fullName, firstName, lastName, email, phone || null, formattedBirthDate]
+            'INSERT INTO Patients (dni, fullName, firstName, lastName, email, phone, birthDate, createdByProfessionalId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [dni, fullName, firstName, lastName, email, phone || null, formattedBirthDate, createdByProfessionalId]
         );
         
         const newPatientId = result.insertId;
-
+        console.log('INSERT exitoso. Nuevo ID de paciente:', newPatientId); // LOG 8
         // Devolver el paciente recién creado
         const [newPatient] = await pool.query('SELECT * FROM Patients WHERE id = ?', [newPatientId]);
+        console.log('Enviando respuesta 201 Created.'); // LOG 9
         res.status(201).json(newPatient[0]);
 
     } catch (error) {
@@ -120,4 +125,33 @@ export const updatePatient = async (req, res) => {
     }
 };
 
+// @desc    Buscar un paciente por DNI para pre-rellenar datos (endpoint público)
+// @route   GET /api/public/patients/lookup
+// @access  Público
+export const lookupPatientByDni = async (req, res) => {
+    const pool = req.dbPool;
+    const { dni } = req.query;
+
+    if (!dni) {
+        return res.status(400).json({ message: "Se requiere un DNI." });
+    }
+
+    try {
+        const [patients] = await pool.query(
+            'SELECT id, dni, firstName, lastName, fullName, email, phone, birthDate FROM Patients WHERE dni = ?',
+            [dni.trim()]
+        );
+
+        if (patients.length > 0) {
+            res.json(patients[0]);
+        } else {
+            res.status(404).json({ message: "Paciente no encontrado." });
+        }
+    } catch (error) {
+        console.error('Error en lookupPatientByDni:', error);
+        res.status(500).json({ message: "Error del servidor al buscar paciente." });
+    }
+};
+
+// ... (y aquí podrías tener en el futuro los controladores de historias clínicas)
 // TODO: Añadir funciones para historias clínicas (getClinicalRecords, addClinicalRecord, etc.) aquí.

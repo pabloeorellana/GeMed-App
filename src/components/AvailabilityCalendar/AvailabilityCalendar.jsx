@@ -1,61 +1,46 @@
+// src/components/AvailabilityCalendar/AvailabilityCalendar.jsx
 import React, { useState, useEffect } from 'react';
 import { Grid, Paper, Typography, Button, CircularProgress, Alert, Box } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
 import { es } from 'date-fns/locale';
+import { format } from 'date-fns';
 
-// ---- INICIO DE CAMBIOS ----
-// YA NO NECESITAMOS MOCK_AVAILABILITY
-// const MOCK_AVAILABILITY = { ... };
-
-// YA NO NECESITAMOS formatDateKey para este mock
-// const formatDateKey = (date) => { ... };
-
-// NUEVA FUNCIÓN PARA GENERAR TURNOS FIJOS
-const generateFixedSlots = (date) => {
-    const slots = [];
-    if (!date) return slots; // Protección por si date es null/undefined
-    const dayOfWeek = date.getDay(); // 0 (Domingo) a 6 (Sábado)
-
-    // Lunes (1) a Viernes (5)
-    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        const startHour = 8;
-        const endHour = 12; // Los turnos serán ANTES de las 12:00
-        const slotDurationMinutes = 30; // Duración de cada turno
-
-        for (let h = startHour; h < endHour; h++) {
-            for (let m = 0; m < 60; m += slotDurationMinutes) {
-                const hourString = String(h).padStart(2, '0');
-                const minuteString = String(m).padStart(2, '0');
-                slots.push(`${hourString}:${minuteString}`);
-            }
-        }
-    }
-    return slots;
-};
-// ---- FIN DE CAMBIOS ----
-
-const AvailabilityCalendar = ({ onSlotSelect }) => {
+const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [availableSlots, setAvailableSlots] = useState([]);
     const [loadingSlots, setLoadingSlots] = useState(false);
     const [error, setError] = useState(null);
 
     useEffect(() => {
+        if (!selectedDate || !professionalId) return;
+
         setLoadingSlots(true);
         setError(null);
-        // ---- INICIO DE CAMBIOS ----
-        // const dateKey = formatDateKey(selectedDate); // Ya no se usa
+        setAvailableSlots([]);
 
-        setTimeout(() => {
-            // const slotsForDate = MOCK_AVAILABILITY[dateKey] || []; // Ya no se usa
-            const slotsForDate = generateFixedSlots(selectedDate); // USAMOS LA NUEVA FUNCIÓN
-            setAvailableSlots(slotsForDate);
-            setLoadingSlots(false);
-        }, 300); // Reducido el delay para que sea más rápido al no ser una "API real"
-        // ---- FIN DE CAMBIOS ----
-    }, [selectedDate]);
+        const dateKey = format(selectedDate, 'yyyy-MM-dd');
+
+        fetch(`http://localhost:3001/api/public/availability?date=${dateKey}&professionalId=${professionalId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error ${response.status} del servidor al obtener horarios.`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                setAvailableSlots(data || []);
+            })
+            .catch(err => {
+                console.error("Error al obtener horarios:", err);
+                setError('No se pudieron cargar los horarios. Intente más tarde.');
+            })
+            .finally(() => {
+                setLoadingSlots(false);
+            });
+
+    }, [selectedDate, professionalId]);
 
     const handleDateChange = (newDate) => {
         setSelectedDate(newDate);
@@ -71,14 +56,11 @@ const AvailabilityCalendar = ({ onSlotSelect }) => {
         onSlotSelect(selectedDateTime);
     };
 
-    // ---- INICIO DE CAMBIOS ----
-    // Función para deshabilitar fines de semana
     const shouldDisableDate = (date) => {
         if (!date) return false;
         const day = date.getDay();
-        return day === 0 || day === 6; // Deshabilita Domingo (0) y Sábado (6)
+        return day === 0 || day === 6; // Deshabilita visualmente Domingo y Sábado
     };
-    // ---- FIN DE CAMBIOS ----
 
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
@@ -93,9 +75,7 @@ const AvailabilityCalendar = ({ onSlotSelect }) => {
                             openTo="day"
                             value={selectedDate}
                             onChange={handleDateChange}
-                            // ---- INICIO DE CAMBIOS ----
-                            shouldDisableDate={shouldDisableDate} // Aplicamos la función para deshabilitar fechas
-                            // ---- FIN DE CAMBIOS ----
+                            shouldDisableDate={shouldDisableDate}
                             minDate={new Date()}
                             sx={{
                                 '& .MuiCalendarPicker-root': {
@@ -128,11 +108,9 @@ const AvailabilityCalendar = ({ onSlotSelect }) => {
                                         </Grid>
                                     ))
                                 ) : (
-                                    // ---- INICIO DE CAMBIOS ----
                                     <Typography sx={{ p: 2, textAlign: 'center', width: '100%', mt: 4 }}>
-                                        No hay horarios disponibles para esta fecha o es fin de semana.
+                                        No hay horarios disponibles para esta fecha.
                                     </Typography>
-                                    // ---- FIN DE CAMBIOS ----
                                 )}
                             </Grid>
                         )}

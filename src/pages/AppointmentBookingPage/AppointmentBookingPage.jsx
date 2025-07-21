@@ -1,24 +1,100 @@
+// src/pages/AppointmentBookingPage/AppointmentBookingPage.jsx
 import React, { useState } from 'react';
-import { Container, Typography, Box, CssBaseline, AppBar, Toolbar, Avatar } from '@mui/material';
+import {
+    Container, Typography, Box, CssBaseline, AppBar, Toolbar, Alert, TextField,
+    Button, CircularProgress, Paper, Dialog, DialogTitle, DialogContent, DialogActions
+} from '@mui/material';
 import AvailabilityCalendar from '../../components/AvailabilityCalendar/AvailabilityCalendar.jsx';
 import PatientForm from '../../components/PatientForm/PatientForm.jsx';
 import AppointmentConfirmation from '../../components/AppointmentConfirmation/AppointmentConfirmation.jsx';
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
-import { CenterFocusStrong } from '@mui/icons-material';
+import SearchIcon from '@mui/icons-material/Search';
+
+const PROFESSIONAL_ID_TO_BOOK = 'e717f22e-cac8-4b0b-8e43-f2dd7023f085'; // <-- Usa un ID de profesional que exista en tu DB
 
 const AppointmentBookingPage = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const [selectedDateTime, setSelectedDateTime] = useState(null);
     const [confirmedAppointment, setConfirmedAppointment] = useState(null);
+    const [dniInput, setDniInput] = useState('');
+    const [recognizedPatient, setRecognizedPatient] = useState(null);
+    const [lookupLoading, setLookupLoading] = useState(false);
+    const [lookupError, setLookupError] = useState('');
+    const [welcomeModalOpen, setWelcomeModalOpen] = useState(true);
+    const [dniLookupPerformed, setDniLookupPerformed] = useState(false);
+    const [submissionError, setSubmissionError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const handleDniLookup = async () => {
+        if (!dniInput.trim()) {
+            setLookupError("Por favor, ingrese un DNI válido para buscar.");
+            return;
+        }
+        setLookupLoading(true);
+        setLookupError('');
+        setRecognizedPatient(null);
+        setDniLookupPerformed(true);
+
+        try {
+            const response = await fetch(`http://localhost:3001/api/public/patients/lookup?dni=${dniInput.trim()}`);
+            if (response.status === 404) {
+                setRecognizedPatient({ dni: dniInput.trim() });
+                throw new Error("DNI no encontrado. Por favor, complete sus datos.");
+            }
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || "Error del servidor al buscar el DNI.");
+            }
+            const patientData = await response.json();
+            setRecognizedPatient(patientData);
+        } catch (error) {
+            setLookupError(error.message);
+            if (!recognizedPatient) {
+                setRecognizedPatient({ dni: dniInput.trim() });
+            }
+        } finally {
+            setLookupLoading(false);
+        }
+    };
 
     const handleSlotSelected = (dateTime) => {
         setSelectedDateTime(dateTime);
         setCurrentStep(2);
     };
 
-    const handleFormSubmit = (patientDetails, appointmentDateTime) => {
-        setConfirmedAppointment({ patient: patientDetails, dateTime: appointmentDateTime });
-        setCurrentStep(3);
+    const handleFormSubmit = async (patientDetails, appointmentDateTime) => {
+        setIsSubmitting(true);
+        setSubmissionError('');
+        try {
+            const payload = {
+                professionalId: PROFESSIONAL_ID_TO_BOOK,
+                dateTime: appointmentDateTime.toISOString(),
+                patientDetails: patientDetails
+            };
+
+            const response = await fetch('http://localhost:3001/api/public/appointments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || "No se pudo confirmar el turno.");
+            }
+            
+            setConfirmedAppointment({
+                patient: patientDetails,
+                dateTime: appointmentDateTime,
+                appointmentDetails: data
+            });
+            setCurrentStep(3);
+        } catch (error) {
+            console.error("Error al confirmar el turno:", error);
+            setSubmissionError(error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleCancelForm = () => {
@@ -27,87 +103,121 @@ const AppointmentBookingPage = () => {
     };
 
     const handleBookAnother = () => {
+        setCurrentStep(1);
         setSelectedDateTime(null);
         setConfirmedAppointment(null);
-        setCurrentStep(1);
+        setDniInput('');
+        setRecognizedPatient(null);
+        setLookupError('');
+        setDniLookupPerformed(false);
+        setWelcomeModalOpen(true);
     };
-    const logoUrl = "https://www.unsta.edu.ar/wp-content/uploads/2018/09/LOGO-2-01.png";
+    
+    const handleCloseWelcomeModal = () => {
+        setWelcomeModalOpen(false);
+    };
 
     return (
         <>
             <CssBaseline />
-            <AppBar position="static">
+            <AppBar position="static" color="primary">
                 <Toolbar>
-                    {}
-                    <Avatar
-                        src={logoUrl}
-                        alt="NutriSmart Logo"
-                        sx={{
-                            mr: 2,
-                            width: 50,
-                            height: 50,
-                        }}
-                    />
-
-                    <Typography
-                        variant="h6"
-                        component="div"
-                        sx={{
-                            flexGrow: 1,
-                            textAlign: 'center',
-                        }}
-                    >
+                    <MedicalInformationIcon sx={{ mr: 2 }} />
+                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                         NutriSmart - Solicitud de turnos
                     </Typography>
-                    {
-
-                    }
                 </Toolbar>
             </AppBar>
-            <Container
-                maxWidth={false}
-                sx={{
-                    mt: 4,
-                    mb: 4,
-                    px: { xs: 2, sm: 3 },
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                }}
+
+            <Dialog
+                open={welcomeModalOpen}
+                disableEscapeKeyDown
+                aria-labelledby="welcome-dialog-title"
+                maxWidth="sm"
+                fullWidth
             >
-                <Box
-                    sx={{
-                        width: '100%',
-                        maxWidth: { md: '1100px' }, 
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center', 
-                        my: 2,
-                    }}
-                >
+                <DialogTitle id="welcome-dialog-title" sx={{ textAlign: 'center', pt: 3 }}>
+                    Bienvenido a NutriSmart
+                </DialogTitle>
+                <DialogContent>
+                    <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+                        <Typography variant="h6" gutterBottom>¿Ya eres paciente?</Typography>
+                        <Typography variant="body2" sx={{ mb: 2 }}>
+                            Ingresa tu DNI para una reserva más rápida. Si es tu primera vez, ingresa tu DNI y presiona "Buscar" para continuar.
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <TextField
+                                label="Ingresar DNI" variant="outlined" size="small"
+                                value={dniInput}
+                                onChange={(e) => { setDniInput(e.target.value); setDniLookupPerformed(false); }}
+                                sx={{ flexGrow: 1 }}
+                                onKeyPress={(e) => e.key === 'Enter' && handleDniLookup()}
+                            />
+                            <Button
+                                variant="contained" onClick={handleDniLookup} disabled={lookupLoading}
+                                startIcon={lookupLoading ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+                            >
+                                Buscar
+                            </Button>
+                        </Box>
+                        {lookupError && <Alert severity="warning" sx={{ mt: 2 }}>{lookupError}</Alert>}
+                        {recognizedPatient && recognizedPatient.id && (
+                            <Alert severity="success" sx={{ mt: 2 }}>
+                                ¡Hola, {recognizedPatient.fullName}! Tus datos se completarán automáticamente.
+                            </Alert>
+                        )}
+                    </Paper>
+                    <Alert severity="info" icon={false} sx={{ bgcolor: 'grey.100' }}>
+                        <Typography variant="h6" component="div" gutterBottom>ATENCIÓN:</Typography>
+                        <Typography variant="body2">El turno solicitado es un compromiso.</Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            Si no asistirá al turno solicitado, rogamos que cancele el mismo para liberar el horario y
+                            pueda ser usado por otro paciente. Agradecemos su compromiso y comprensión.
+                        </Typography>
+                    </Alert>
+                </DialogContent>
+                <DialogActions sx={{ p: '16px 24px' }}>
+                    <Button
+                        onClick={handleCloseWelcomeModal}
+                        variant="contained"
+                        fullWidth
+                        disabled={!dniLookupPerformed || lookupLoading}
+                    >
+                        Acepto, Continuar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+                <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     {currentStep === 1 && (
                         <>
-                            <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 3 }}>
-                                Bienvenidos!
+                            <Typography variant="h4" component="h1" gutterBottom>
+                                Seleccione un Día y Horario
                             </Typography>
-                            {}
-                            {}
-                            <AvailabilityCalendar onSlotSelect={handleSlotSelected} />
+                            <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: 'center', maxWidth: '700px' }}>
+                                Haga clic sobre un horario disponible para comenzar su reserva.
+                            </Typography>
+                            <AvailabilityCalendar
+                                onSlotSelect={handleSlotSelected}
+                                professionalId={PROFESSIONAL_ID_TO_BOOK}
+                            />
                         </>
                     )}
-
-                    {currentStep === 2 && selectedDateTime && (
-                        <Box sx={{ width: '100%', maxWidth: {sm: '600px', md: '700px'} }}> {}
-                             <PatientForm
+                    {currentStep === 2 && (
+                        <Box sx={{ width: '100%', maxWidth: '700px' }}>
+                            <PatientForm
                                 selectedDateTime={selectedDateTime}
                                 onSubmit={handleFormSubmit}
                                 onCancel={handleCancelForm}
+                                prefilledData={recognizedPatient}
+                                submissionError={submissionError}
+                                isSubmitting={isSubmitting}
                             />
                         </Box>
                     )}
-
-                    {currentStep === 3 && confirmedAppointment && (
-                         <Box sx={{ width: '100%', maxWidth: {sm: '600px', md: '700px'} }}> {}
+                    {currentStep === 3 && (
+                         <Box sx={{ width: '100%', maxWidth: '700px' }}>
                             <AppointmentConfirmation
                                 appointmentDetails={confirmedAppointment}
                                 onBookAnother={handleBookAnother}

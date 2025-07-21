@@ -1,7 +1,9 @@
+// server/controllers/availabilityController.js
+import { format, parseISO, addMinutes, isBefore } from 'date-fns';
+
 export const getRegularSchedules = async (req, res) => {
     const pool = req.dbPool;
     const professionalUserId = req.user.userId;
-
     try {
         const [schedules] = await pool.query(
             'SELECT id, dayOfWeek, startTime, endTime, slotDurationMinutes FROM ProfessionalAvailability WHERE professionalUserId = ? ORDER BY dayOfWeek, startTime',
@@ -18,21 +20,19 @@ export const addRegularSchedule = async (req, res) => {
     const pool = req.dbPool;
     const professionalUserId = req.user.userId;
     const { dayOfWeek, startTime, endTime, slotDurationMinutes } = req.body;
-
     if (dayOfWeek === undefined || !startTime || !endTime || !slotDurationMinutes) {
         return res.status(400).json({ message: 'Todos los campos son requeridos: día, hora inicio, hora fin, duración.' });
     }
-
     try {
         const [result] = await pool.query(
             'INSERT INTO ProfessionalAvailability (professionalUserId, dayOfWeek, startTime, endTime, slotDurationMinutes) VALUES (?, ?, ?, ?, ?)',
             [professionalUserId, dayOfWeek, startTime, endTime, slotDurationMinutes]
         );
         const newScheduleId = result.insertId;
-        res.status(201).json({ id: newScheduleId, professionalUserId, dayOfWeek, startTime, endTime, slotDurationMinutes });
+        const [newSchedule] = await pool.query('SELECT * FROM ProfessionalAvailability WHERE id = ?', [newScheduleId]);
+        res.status(201).json(newSchedule[0]);
     } catch (error) {
         console.error('Error en addRegularSchedule:', error);
-        // Manejar error de entrada duplicada (uq_availability_prof_day_time)
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ message: 'Ya existe un horario configurado para ese día y hora de inicio.' });
         }
@@ -44,7 +44,6 @@ export const removeRegularSchedule = async (req, res) => {
     const pool = req.dbPool;
     const professionalUserId = req.user.userId;
     const { scheduleId } = req.params;
-
     try {
         const [result] = await pool.query(
             'DELETE FROM ProfessionalAvailability WHERE id = ? AND professionalUserId = ?',
@@ -61,7 +60,6 @@ export const removeRegularSchedule = async (req, res) => {
     }
 };
 
-
 export const getTimeBlocks = async (req, res) => {
     const pool = req.dbPool;
     const professionalUserId = req.user.userId;
@@ -73,7 +71,7 @@ export const getTimeBlocks = async (req, res) => {
         const formattedBlocks = blocks.map(block => ({
             ...block,
             start: block.startDateTime,
-            end: block.endDateTime,   
+            end: block.endDateTime,
             title: `Bloqueo: ${block.reason || (block.isAllDay ? 'Día Completo' : '')}`,
             allDay: !!block.isAllDay
         }));
@@ -104,14 +102,10 @@ export const addTimeBlock = async (req, res) => {
     if (!isAllDay && parsedEnd <= parsedStart) return res.status(400).json({ message: 'La fecha/hora de fin debe ser posterior a la de inicio.' });
 
     let finalStartDateTimeForDB, finalEndDateTimeForDB;
-
-
-
-
     if (isAllDay) {
         parsedStart.setHours(0, 0, 0, 0);
         finalStartDateTimeForDB = parsedStart.toISOString().slice(0, 19).replace('T', ' ');
-        const endOfDay = new Date(parsedStart); 
+        const endOfDay = new Date(parsedStart);
         endOfDay.setHours(23, 59, 59, 999);
         finalEndDateTimeForDB = endOfDay.toISOString().slice(0, 19).replace('T', ' ');
     } else {
@@ -144,7 +138,6 @@ export const removeTimeBlock = async (req, res) => {
     const pool = req.dbPool;
     const professionalUserId = req.user.userId;
     const { blockId } = req.params;
-
     try {
         const [result] = await pool.query(
             'DELETE FROM ProfessionalTimeBlocks WHERE id = ? AND professionalUserId = ?',
@@ -158,5 +151,69 @@ export const removeTimeBlock = async (req, res) => {
     } catch (error) {
         console.error('Error en removeTimeBlock:', error);
         res.status(500).json({ message: 'Error del servidor al eliminar bloqueo de tiempo' });
+    }
+};
+
+export const getAvailability = async (req, res) => {
+    const pool = req.dbPool;
+    const { date, professionalId } = req.query;
+
+    if (!date || !professionalId) {
+        return res.status(400).json({ message: "Se requiere fecha y ID del profesional." });
+    }
+
+    try {
+        const requestedDate = parseISO(date);
+        const dayOfWeek = requestedDate.getDay();
+
+        const [schedules] = await pool.query(
+            'SELECT startTime, endTime, slotDurationMinutes FROM ProfessionalAvailability WHERE professionalUserId = ? AND dayOfWeek = ?',
+            [professionalId, dayOfWeek]
+        );
+
+        if (schedules.length === 0) {
+            return res.json([]);
+        }
+
+        const [appointments] = await pool.query(
+            'SELECT dateTime FROM Appointments WHERE professionalUserId = ? AND DATE(dateTime) = ? AND status NOT LIKE ?',
+            [professionalId, date, 'CANCELED%']
+        );
+        const [blocks] = await pool.query(
+            'SELECT startDateTime, endDateTime FROM ProfessionalTimeBlocks WHERE professionalUserId = ? AND DATE(startDateTime) <= ? AND DATE(endDateTime) >= ?',
+            [professionalId, date, date]
+        );
+
+        const bookedSlots = new Set(appointments.map(a => format(new Date(a.dateTime), 'HH:mm')));
+        const availableSlots = [];
+
+        for (const schedule of schedules) {
+            let currentTime = parseISO(`${date}T${schedule.startTime}`);
+            const endTime = parseISO(`${date}T${schedule.endTime}`);
+            
+            while (isBefore(currentTime, endTime)) {
+                const slotTime = format(currentTime, 'HH:mm');
+
+                let isBlocked = false;
+                for (const block of blocks) {
+                    if (currentTime >= new Date(block.startDateTime) && currentTime < new Date(block.endDateTime)) {
+                        isBlocked = true;
+                        break;
+                    }
+                }
+                
+                if (!bookedSlots.has(slotTime) && !isBlocked && isBefore(new Date(), currentTime)) {
+                    availableSlots.push(slotTime);
+                }
+
+                currentTime = addMinutes(currentTime, schedule.slotDurationMinutes);
+            }
+        }
+        
+        res.json(availableSlots);
+
+    } catch (error) {
+        console.error("Error en getAvailability:", error);
+        res.status(500).json({ message: "Error del servidor al obtener la disponibilidad." });
     }
 };

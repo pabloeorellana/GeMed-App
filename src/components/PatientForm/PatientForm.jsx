@@ -1,15 +1,35 @@
-import React, { useState } from 'react';
-import { TextField, Button, Grid, Typography, Paper, Box } from '@mui/material';
-import { GoogleLoginButton } from 'react-social-login-buttons'; // Asegúrate de tenerlo instalado
+// src/components/PatientForm/PatientForm.jsx
+import React, { useState, useEffect } from 'react';
+import { TextField, Button, Grid, Typography, Paper, Box, Alert, CircularProgress} from '@mui/material';
 
-const PatientForm = ({ selectedDateTime, onSubmit, onCancel }) => {
+const PatientForm = ({ selectedDateTime, onSubmit, onCancel, prefilledData, submissionError, isSubmitting }) => {
     const [patientDetails, setPatientDetails] = useState({
-        name: '',
+        dni: '',
+        lastName: '',
+        firstName: '',
         email: '',
-        whatsapp: '',
+        phone: '',
         motivo: '',
     });
     const [errors, setErrors] = useState({});
+
+    useEffect(() => {
+        if (prefilledData && prefilledData.id) {
+            setPatientDetails(prevDetails => ({
+                ...prevDetails,
+                dni: prefilledData.dni || '',
+                lastName: prefilledData.lastName || '',
+                firstName: prefilledData.firstName || '',
+                email: prefilledData.email || '',
+                phone: prefilledData.phone || '',
+            }));
+        } else if (prefilledData && prefilledData.dni && !prefilledData.id) {
+            setPatientDetails(prevDetails => ({
+                ...prevDetails,
+                dni: prefilledData.dni,
+            }));
+        }
+    }, [prefilledData]);
 
     const handleChange = (event) => {
         const { name, value } = event.target;
@@ -18,17 +38,16 @@ const PatientForm = ({ selectedDateTime, onSubmit, onCancel }) => {
             setErrors(prev => ({ ...prev, [name]: null }));
         }
     };
-
+    
     const validateForm = () => {
         const newErrors = {};
-        if (!patientDetails.name.trim()) newErrors.name = 'El nombre es requerido.';
+        if (!patientDetails.dni.trim()) newErrors.dni = 'DNI es requerido.';
+        if (!patientDetails.lastName.trim()) newErrors.lastName = 'Apellido es requerido.';
+        if (!patientDetails.firstName.trim()) newErrors.firstName = 'Nombre es requerido.';
         if (!patientDetails.email.trim()) {
-            newErrors.email = 'El correo electrónico es requerido.';
+            newErrors.email = 'Correo electrónico es requerido.';
         } else if (!/\S+@\S+\.\S+/.test(patientDetails.email)) {
             newErrors.email = 'El formato del correo no es válido.';
-        }
-        if (patientDetails.whatsapp.trim() && !/^\+?[0-9\s-]{7,15}$/.test(patientDetails.whatsapp)) {
-             newErrors.whatsapp = 'El número de WhatsApp no es válido.';
         }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -41,142 +60,83 @@ const PatientForm = ({ selectedDateTime, onSubmit, onCancel }) => {
         }
     };
 
-    const handleGoogleLoginSuccess = (response) => {
-        console.log("Login con Google exitoso (simulado):", response);
-        setPatientDetails(prev => ({
-            ...prev,
-            name: "Usuario de Google (Simulado)",
-            email: "usuario.google@example.com"
-        }));
-        // Considera limpiar errores si el login de Google llena campos validados
-        setErrors(prev => ({ ...prev, name: null, email: null }));
-    };
-
-    const handleGoogleLoginFailure = (error) => {
-        console.error("Error en login con Google (simulado):", error);
-    };
-
     if (!selectedDateTime) return null;
+
+    const isPatientRecognized = !!(prefilledData && prefilledData.id);
 
     return (
         <Paper elevation={3} sx={{ p: { xs: 2, sm: 3 }, mt: 3 }}>
-            {/* ... Títulos y botón de Google como antes ... */}
             <Typography variant="h5" gutterBottom component="div" sx={{ textAlign: 'center' }}>
-                Confirma tu Cita
+                Confirma tus Datos para el Turno
             </Typography>
             <Typography variant="subtitle1" gutterBottom component="div" sx={{ textAlign: 'center', mb: 3 }}>
-                Has seleccionado: {selectedDateTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} a las {selectedDateTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                Turno para el: {selectedDateTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} a las {selectedDateTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
             </Typography>
 
-            <Box
-                component="form"
-                onSubmit={handleSubmit}
-                noValidate
-                sx={{
-                    width: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                }}
-            >
-                <Box sx={{ mb: 2, width: 'fit-content' }}>
-                    <GoogleLoginButton
-                        onClick={() => {
-                            alert('Simulación: Iniciando sesión con Google...');
-                            handleGoogleLoginSuccess({ profileObj: { name: 'Nombre Google', email: 'email.google@example.com' } });
-                        }}
-                        style={{ fontSize: '14px', margin: 0 }}
-                    >
-                        <span>Continuar con Google</span>
-                    </GoogleLoginButton>
-                </Box>
+            {submissionError && <Alert severity="error" sx={{ mb: 2 }}>{submissionError}</Alert>}
 
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                    o completa tus datos:
-                </Typography>
-
-                {/* ========= SECCIÓN CLAVE PARA LA COLUMNA ÚNICA DE CAMPOS ========= */}
-                <Box sx={{ width: '100%', maxWidth: '450px' }}> {/* Contenedor centrado con ancho máximo */}
-                    <Grid container spacing={2}>
-                        <Grid item xs={12}> {/* xs={12} asegura que ocupe toda la fila disponible */}
-                            <TextField
-                                required
-                                fullWidth // El TextField llenará el ancho del Grid item
-                                id="name"
-                                label="Nombre Completo"
-                                name="name"
-                                value={patientDetails.name}
-                                onChange={handleChange}
-                                error={!!errors.name}
-                                helperText={errors.name}
-                            />
-                        </Grid>
-                        <Grid item xs={12}> {/* xs={12} asegura que ocupe toda la fila disponible */}
-                            <TextField
-                                required
-                                fullWidth
-                                id="email"
-                                label="Correo Electrónico"
-                                name="email"
-                                type="email"
-                                value={patientDetails.email}
-                                onChange={handleChange}
-                                error={!!errors.email}
-                                helperText={errors.email}
-                            />
-                        </Grid>
-                        <Grid item xs={12}> {/* xs={12} asegura que ocupe toda la fila disponible */}
-                            <TextField
-                                fullWidth
-                                id="whatsapp"
-                                label="Número de WhatsApp (Opcional)"
-                                name="whatsapp"
-                                value={patientDetails.whatsapp}
-                                onChange={handleChange}
-                                error={!!errors.whatsapp}
-                                helperText={errors.whatsapp}
-                            />
-                        </Grid>
-                        <Grid item xs={12}> {/* xs={12} asegura que ocupe toda la fila disponible */}
-                            <TextField
-                                fullWidth
-                                id="motivo"
-                                label="Motivo de la consulta (Opcional)"
-                                name="motivo"
-                                multiline
-                                rows={3}
-                                value={patientDetails.motivo}
-                                onChange={handleChange}
-                            />
-                        </Grid>
+            <Box component="form" onSubmit={handleSubmit} noValidate>
+                <Grid container spacing={2} direction="column">
+                    <Grid item>
+                        <TextField
+                            name="dni" label="DNI *" value={patientDetails.dni}
+                            onChange={handleChange} fullWidth error={!!errors.dni}
+                            helperText={errors.dni}
+                            disabled={isPatientRecognized}
+                            variant={isPatientRecognized ? "filled" : "outlined"}
+                        />
                     </Grid>
-                </Box>
-                {/* ========= FIN DE LA SECCIÓN CLAVE ========= */}
-
-                {/* Contenedor para los botones de acción */}
-                <Box sx={{ width: '100%', maxWidth: '450px', mt: 3 }}>
-                    <Grid container spacing={2}>
+                    <Grid item>
+                        <TextField
+                            name="lastName" label="Apellido *" value={patientDetails.lastName}
+                            onChange={handleChange} fullWidth error={!!errors.lastName}
+                            helperText={errors.lastName}
+                            disabled={isPatientRecognized}
+                            variant={isPatientRecognized ? "filled" : "outlined"}
+                        />
+                    </Grid>
+                    <Grid item>
+                        <TextField
+                            name="firstName" label="Nombre *" value={patientDetails.firstName}
+                            onChange={handleChange} fullWidth error={!!errors.firstName}
+                            helperText={errors.firstName}
+                            disabled={isPatientRecognized}
+                            variant={isPatientRecognized ? "filled" : "outlined"}
+                        />
+                    </Grid>
+                    <Grid item>
+                        <TextField
+                            name="email" label="Correo Electrónico *" type="email"
+                            value={patientDetails.email} onChange={handleChange}
+                            fullWidth error={!!errors.email} helperText={errors.email}
+                        />
+                    </Grid>
+                    <Grid item>
+                        <TextField
+                            name="phone" label="Teléfono" value={patientDetails.phone}
+                            onChange={handleChange} fullWidth
+                        />
+                    </Grid>
+                    <Grid item>
+                        <TextField
+                            name="motivo" label="Motivo de la consulta (Opcional)"
+                            multiline rows={3} fullWidth
+                            value={patientDetails.motivo || ''} onChange={handleChange}
+                        />
+                    </Grid>
+                    <Grid item container spacing={2} sx={{ mt: 1 }}>
                         <Grid item xs={12} sm={6}>
-                            <Button
-                                type="button"
-                                fullWidth
-                                variant="outlined"
-                                onClick={onCancel}
-                            >
+                            <Button type="button" fullWidth variant="outlined" onClick={onCancel} disabled={isSubmitting}>
                                 Cancelar / Volver
                             </Button>
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                            <Button
-                                type="submit"
-                                fullWidth
-                                variant="contained"
-                            >
-                                Confirmar Cita {/* Cambiado a Cita, como en la imagen */}
+                            <Button type="submit" fullWidth variant="contained" disabled={isSubmitting}>
+                                {isSubmitting ? <CircularProgress size={24} color="inherit" /> : 'Confirmar Turno'}
                             </Button>
                         </Grid>
                     </Grid>
-                </Box>
+                </Grid>
             </Box>
         </Paper>
     );

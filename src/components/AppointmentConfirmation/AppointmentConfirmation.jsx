@@ -11,16 +11,16 @@ const AppointmentConfirmation = ({ appointmentDetails, onBookAnother }) => {
         <Paper elevation={3} sx={{ p: 3, mt: 3, textAlign: 'center' }}>
             <CheckCircleOutlineIcon color="success" sx={{ fontSize: 60, mb: 2 }} />
             <Typography variant="h5" gutterBottom component="div">
-                ¡Cita Confirmada!
+                Turno Confirmado!
             </Typography>
             <Alert severity="success" sx={{mb: 2}}>
-                Hemos recibido tu solicitud de cita.
+                Hemos recibido tu solicitud de turno.
             </Alert>
             <Typography variant="body1" sx={{ mb: 1 }}>
                 Estimado/a **{patient.name}**,
             </Typography>
             <Typography variant="body1" sx={{ mb: 1 }}>
-                Tu cita ha sido programada para el:
+                Tu turno ha sido programado para el:
             </Typography>
             <Typography variant="h6" color="primary" sx={{ mb: 2 }}>
                 {dateTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
@@ -39,7 +39,7 @@ const AppointmentConfirmation = ({ appointmentDetails, onBookAnother }) => {
                 (Esto es una simulación. En una aplicación real, se enviarían notificaciones y se integraría con calendarios).
             </Typography>
             <Button variant="contained" onClick={onBookAnother}>
-                Reservar Otra Cita
+                Reservar Otro Turno
             </Button>
         </Paper>
     );

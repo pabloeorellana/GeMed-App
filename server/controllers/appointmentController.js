@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from 'uuid';
+
 // @desc    Obtener los turnos de un profesional para un rango de fechas
 // @route   GET /api/appointments
 // @access  Privado (PROFESSIONAL, ADMIN)
@@ -184,5 +186,92 @@ export const updateProfessionalNotes = async (req, res) => {
     } catch(error) {
         console.error('Error en updateProfessionalNotes:', error);
         res.status(500).json({ message: 'Error del servidor al guardar notas.' });
+    }
+};
+// @desc    Crear un nuevo turno desde la vista pública del paciente
+// @route   POST /api/public/appointments
+// @access  Público
+export const createPublicAppointment = async (req, res) => {
+    const pool = req.dbPool;
+    const { professionalId, dateTime, patientDetails } = req.body;
+    const { dni, firstName, lastName, email, phone, birthDate } = patientDetails;
+
+    // Validación de entrada
+    if (!professionalId || !dateTime || !dni || !firstName || !lastName || !email) {
+        return res.status(400).json({ message: 'Faltan datos requeridos para la reserva.' });
+    }
+
+    let connection;
+    try {
+        connection = await pool.getConnection(); // Obtener una conexión del pool para la transacción
+        await connection.beginTransaction();
+
+        // 1. VERIFICAR DISPONIBILIDAD DEL SLOT (CRÍTICO)
+        const formattedDateTime = new Date(dateTime).toISOString().slice(0, 19).replace('T', ' ');
+                console.log(`VERIFICANDO SLOT: professionalId=${professionalId}, dateTime=${formattedDateTime}`);
+        
+        const [existingAppointments] = await connection.query(
+            'SELECT id FROM Appointments WHERE professionalUserId = ? AND dateTime = ? AND status NOT LIKE ? FOR UPDATE',
+            [professionalId, formattedDateTime, 'CANCELED%']
+        );
+                console.log(`SLOTS ENCONTRADOS: ${existingAppointments.length}`, existingAppointments);
+
+        // 'FOR UPDATE' bloquea las filas seleccionadas, previniendo que otra transacción las lea y cree un turno duplicado.
+
+        if (existingAppointments.length > 0) {
+            await connection.rollback();
+            return res.status(409).json({ message: 'Lo sentimos, este horario ya no está disponible. Por favor, seleccione otro.' }); // 409 Conflict
+        }
+
+        // 2. BUSCAR O CREAR PACIENTE
+        let patientId;
+        const [existingPatients] = await connection.query('SELECT id FROM Patients WHERE dni = ?', [dni]);
+
+        if (existingPatients.length > 0) {
+            // El paciente ya existe, usar su ID
+            patientId = existingPatients[0].id;
+            // Opcional: Actualizar datos del paciente si han cambiado
+            await connection.query(
+                'UPDATE Patients SET firstName = ?, lastName = ?, fullName = ?, email = ?, phone = ?, birthDate = ?, updatedAt = NOW() WHERE id = ?',
+                [firstName, lastName, `${firstName} ${lastName}`, email, phone || null, birthDate ? new Date(birthDate).toISOString().slice(0, 10) : null, patientId]
+            );
+        } else {
+            // El paciente no existe, crearlo
+            const fullName = `${firstName} ${lastName}`;
+            const formattedBirthDate = birthDate ? new Date(birthDate).toISOString().slice(0, 10) : null;
+            const [newPatientResult] = await connection.query(
+                'INSERT INTO Patients (dni, fullName, firstName, lastName, email, phone, birthDate, createdByProfessionalId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [dni, fullName, firstName, lastName, email, phone || null, formattedBirthDate, professionalId]
+            );
+            patientId = newPatientResult.insertId;
+        }
+
+        // 3. CREAR EL TURNO
+        const appointmentId = `appt_${uuidv4()}`; // Usar UUID para un ID más robusto
+        await connection.query(
+            'INSERT INTO Appointments (id, dateTime, patientId, professionalUserId, status) VALUES (?, ?, ?, ?, ?)',
+            [appointmentId, formattedDateTime, patientId, professionalId, 'SCHEDULED']
+        );
+        
+        // 4. CONFIRMAR TRANSACCIÓN
+        await connection.commit();
+
+        // (Opcional) Aquí podrías desencadenar el envío de un email de confirmación
+        
+        res.status(201).json({
+            message: '¡Turno confirmado exitosamente!',
+            appointment: {
+                id: appointmentId,
+                dateTime: formattedDateTime,
+                patientId: patientId,
+            }
+        });
+
+    } catch (error) {
+        if (connection) await connection.rollback(); // Revertir cambios si algo falla
+        console.error('Error en createPublicAppointment:', error);
+        res.status(500).json({ message: 'Error del servidor al procesar la reserva.' });
+    } finally {
+        if (connection) connection.release(); // Liberar la conexión de vuelta al pool
     }
 };
