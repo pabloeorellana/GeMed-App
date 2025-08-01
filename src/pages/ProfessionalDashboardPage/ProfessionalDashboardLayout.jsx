@@ -1,37 +1,25 @@
-import React, { useState } from 'react';
+// src/pages/ProfessionalDashboardPage/ProfessionalDashboardLayout.jsx
+import React, { useState, useEffect } from 'react'; // <<<--- AÑADIDO useEffect
 import { Routes, Route, Link as RouterLink, Navigate, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import {
-    AppBar,
-    Box,
-    CssBaseline,
-    Drawer,
-    IconButton,
-    List,
-    ListItem,
-    ListItemButton,
-    ListItemIcon,
-    ListItemText,
-    Toolbar,
-    Typography,
-    Divider,
-    Tooltip,
-    Avatar,
-    Menu,
-    MenuItem,
-    Badge,
-    Stack,
-    Button 
+    AppBar, Box, CssBaseline, Drawer, IconButton, List, ListItem,
+    ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography,
+    Divider, Tooltip, Avatar, Menu, MenuItem, Badge, Stack, Button
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import EventIcon from '@mui/icons-material/Event';
 import ScheduleSendIcon from '@mui/icons-material/ScheduleSend';
 import PeopleIcon from '@mui/icons-material/People';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import LogoutIcon from '@mui/icons-material/Logout';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import LockResetIcon from '@mui/icons-material/LockReset';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import LogoutIcon from '@mui/icons-material/Logout';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import { useAuth } from '../../context/AuthContext';
+import authFetch from '../../utils/authFetch';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 import AppointmentsView from './views/AppointmentsView.jsx';
 import AvailabilityView from './views/AvailabilityView.jsx';
@@ -41,22 +29,45 @@ import StatisticsView from './views/StatisticsView.jsx';
 
 const drawerWidth = 240;
 
-const loggedInProfessional = {
-    fullName: "NutriSmart Pro",
-    avatarUrl: '',
-};
-
 const ProfessionalDashboardLayout = (props) => {
     const { window } = props;
     const [mobileOpen, setMobileOpen] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
     const navigate = useNavigate();
-    const [anchorElUser, setAnchorElUser] = useState(null);
-    const [notificationsCount, setNotificationsCount] = useState(5);
     const { authUser, logout } = useAuth();
+    const [anchorElUser, setAnchorElUser] = useState(null);
+    const [anchorElNotifications, setAnchorElNotifications] = useState(null);
+    const [notifications, setNotifications] = useState([]);
+    const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            if (!authUser) return;
+            try {
+                const data = await authFetch('http://localhost:3001/api/notifications');
+                setNotifications(data.notifications || []);
+                setUnreadNotifications(data.unreadCount || 0);
+            } catch (error) {
+                console.error("Error al obtener notificaciones:", error);
+            }
+        };
+        fetchNotifications();
+        const intervalId = setInterval(fetchNotifications, 30000);
+        return () => clearInterval(intervalId);
+    }, [authUser]);
 
     const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
     const handleCloseUserMenu = () => setAnchorElUser(null);
+
+    const handleOpenNotificationsMenu = (event) => {
+        setAnchorElNotifications(event.currentTarget);
+        if (unreadNotifications > 0) {
+            authFetch('http://localhost:3001/api/notifications/mark-as-read', { method: 'PUT' })
+                .then(() => setUnreadNotifications(0))
+                .catch(err => console.error("Error al marcar notificaciones como leídas:", err));
+        }
+    };
+    const handleCloseNotificationsMenu = () => setAnchorElNotifications(null);
 
     const handleDrawerToggle = () => {
         if (!isClosing) {
@@ -78,15 +89,9 @@ const ProfessionalDashboardLayout = (props) => {
         logout();
     };
 
-    const handleChangePassword = () => {
+    const handleGoToProfile = () => {
         handleCloseUserMenu();
         navigate('/profesional/dashboard/perfil');
-        alert('Redirigiendo a cambiar contraseña (simulado)...');
-    };
-
-    const handleNotificationsClick = () => {
-        alert(`Tienes ${notificationsCount} notificaciones (simulado).`);
-        setNotificationsCount(0);
     };
 
     const menuItems = [
@@ -104,20 +109,13 @@ const ProfessionalDashboardLayout = (props) => {
         return name.substring(0, 2).toUpperCase();
     };
 
+    const professionalName = authUser?.user?.fullName || "Profesional";
+    const professionalAvatarUrl = authUser?.user?.profileImageUrl;
+
     const drawer = (
         <div>
-            <Toolbar sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <Typography
-                    variant="h6"
-                    noWrap
-                    component={RouterLink}
-                    to="/profesional/dashboard/agenda"
-                    sx={{
-                        color: 'inherit',
-                        textDecoration: 'none',
-                        fontWeight: 700,
-                    }}
-                >
+            <Toolbar>
+                <Typography variant="h6" noWrap component="div">
                     NutriSmart Pro
                 </Typography>
             </Toolbar>
@@ -149,57 +147,23 @@ const ProfessionalDashboardLayout = (props) => {
     );
 
     const container = window !== undefined ? () => window().document.body : undefined;
-    const professionalName = authUser?.user?.fullName || "Profesional";
-    const professionalAvatarUrl = authUser?.user?.avatarUrl;
-    
+
     return (
         <Box sx={{ display: 'flex' }}>
             <CssBaseline />
-            <AppBar
-                position="fixed"
-                sx={{
-                    zIndex: (theme) => theme.zIndex.drawer + 1,
-                }}
-            >
+            <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
                 <Toolbar>
-                    <IconButton
-                        color="inherit"
-                        aria-label="open drawer"
-                        edge="start"
-                        onClick={handleDrawerToggle}
-                        sx={{ mr: 2, display: { sm: 'none' } }}
-                    >
+                    <IconButton color="inherit" aria-label="open drawer" edge="start" onClick={handleDrawerToggle} sx={{ mr: 2, display: { sm: 'none' } }}>
                         <MenuIcon />
                     </IconButton>
-                    <Typography
-                        variant="h6"
-                        noWrap
-                        component={RouterLink}
-                        to="/profesional/dashboard/agenda"
-                        sx={{
-                            display: { xs: 'none', sm: 'flex' },
-                            fontWeight: 700,
-                            letterSpacing: '.1rem',
-                            color: 'inherit',
-                            textDecoration: 'none',
-                            alignItems: 'center'
-                        }}
-                    >
+                    <Typography variant="h6" noWrap component={RouterLink} to="/profesional/dashboard/agenda" sx={{ display: { xs: 'none', sm: 'flex' }, fontWeight: 700, color: 'inherit', textDecoration: 'none', alignItems: 'center' }}>
                         NutriSmart Pro
                     </Typography>
-                     <Typography
-                        variant="h6"
-                        noWrap
-                        component="div"
-                        sx={{ flexGrow: 1, display: { xs: 'flex', sm: 'none' }, justifyContent: 'center' }}
-                    >
-                        Panel
-                    </Typography>
-                    <Box sx={{ flexGrow: {xs: 0, sm: 1} }} />
+                    <Box sx={{ flexGrow: 1 }} />
                     <Stack direction="row" spacing={1.5} alignItems="center">
                         <Tooltip title="Notificaciones">
-                            <IconButton color="inherit" onClick={handleNotificationsClick}>
-                                <Badge badgeContent={notificationsCount} color="error">
+                            <IconButton color="inherit" onClick={handleOpenNotificationsMenu}>
+                                <Badge badgeContent={unreadNotifications} color="error">
                                     <NotificationsIcon />
                                 </Badge>
                             </IconButton>
@@ -207,25 +171,24 @@ const ProfessionalDashboardLayout = (props) => {
                         <Tooltip title="Opciones de Usuario">
                             <Button
                                 onClick={handleOpenUserMenu}
-                                sx={{ p: 0, color: 'inherit', textTransform: 'none', minWidth: 'auto' }}
+                                sx={{ p: 0.5, color: 'inherit', textTransform: 'none', borderRadius: '16px' }}
                                 startIcon={
                                     <Avatar
-                                        alt={loggedInProfessional.fullName}
-                                        src={loggedInProfessional.avatarUrl || undefined}
+                                        alt={professionalName}
+                                        src={professionalAvatarUrl || undefined}
                                         sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}
                                     >
-                                        {!loggedInProfessional.avatarUrl && getInitials(loggedInProfessional.fullName)}
+                                        {!professionalAvatarUrl && getInitials(professionalName)}
                                     </Avatar>
                                 }
                             >
                                 <Typography sx={{ display: { xs: 'none', md: 'block' }, ml: 0.5 }}>
-                                    {loggedInProfessional.fullName}
+                                    {professionalName}
                                 </Typography>
                             </Button>
                         </Tooltip>
                         <Menu
                             sx={{ mt: '45px' }}
-                            id="menu-appbar"
                             anchorEl={anchorElUser}
                             anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
                             keepMounted
@@ -233,14 +196,44 @@ const ProfessionalDashboardLayout = (props) => {
                             open={Boolean(anchorElUser)}
                             onClose={handleCloseUserMenu}
                         >
-                            <MenuItem onClick={handleChangePassword}>
-                                <ListItemIcon><LockResetIcon fontSize="small" /></ListItemIcon>
-                                <ListItemText>Cambiar Contraseña</ListItemText>
+                            <MenuItem onClick={handleGoToProfile}>
+                                <ListItemIcon><AccountCircleIcon fontSize="small" /></ListItemIcon>
+                                <ListItemText>Mi Perfil</ListItemText>
                             </MenuItem>
                             <MenuItem onClick={handleLogout}>
                                 <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
                                 <ListItemText>Cerrar Sesión</ListItemText>
                             </MenuItem>
+                        </Menu>
+                        <Menu
+                            sx={{ mt: '45px' }}
+                            anchorEl={anchorElNotifications}
+                            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                            keepMounted
+                            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                            open={Boolean(anchorElNotifications)}
+                            onClose={handleCloseNotificationsMenu}
+                            PaperProps={{ style: { width: 350, maxHeight: 400 } }}
+                        >
+                            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                                <Typography variant="h6" component="div">Notificaciones</Typography>
+                            </Box>
+                            {notifications.length > 0 ? (
+                                notifications.map(notification => (
+                                    <MenuItem key={notification.id} onClick={handleCloseNotificationsMenu} component={RouterLink} to={notification.link || '#'}>
+                                        <ListItemIcon><EventAvailableIcon fontSize="small" color={notification.isRead ? 'inherit' : 'primary'} /></ListItemIcon>
+                                        <ListItemText
+                                            primary={notification.message}
+                                            secondary={formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true, locale: es })}
+                                            primaryTypographyProps={{ style: { fontWeight: notification.isRead ? 400 : 600, whiteSpace: 'normal' } }}
+                                        />
+                                    </MenuItem>
+                                ))
+                            ) : (
+                                <MenuItem onClick={handleCloseNotificationsMenu}>
+                                    <ListItemText primary="No hay notificaciones nuevas." />
+                                </MenuItem>
+                            )}
                         </Menu>
                     </Stack>
                 </Toolbar>
@@ -257,19 +250,13 @@ const ProfessionalDashboardLayout = (props) => {
                     onTransitionEnd={handleDrawerTransitionEnd}
                     onClose={handleDrawerClose}
                     ModalProps={{ keepMounted: true }}
-                    sx={{
-                        display: { xs: 'block', sm: 'none' },
-                        '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-                    }}
+                    sx={{ display: { xs: 'block', sm: 'none' }, '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth } }}
                 >
                     {drawer}
                 </Drawer>
                 <Drawer
                     variant="permanent"
-                    sx={{
-                        display: { xs: 'none', sm: 'block' },
-                        '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-                    }}
+                    sx={{ display: { xs: 'none', sm: 'block' }, '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth } }}
                     open
                 >
                     {drawer}
@@ -281,12 +268,12 @@ const ProfessionalDashboardLayout = (props) => {
             >
                 <Toolbar />
                 <Routes>
-                        <Route path="/" element={<Navigate to="agenda" replace />} />
-                        <Route path="agenda" element={<AppointmentsView />} />
-                        <Route path="disponibilidad" element={<AvailabilityView />} />
-                        <Route path="pacientes" element={<PatientsView />} />
-                        <Route path="estadisticas" element={<StatisticsView />} />
-                        <Route path="perfil" element={<ProfileView />} />
+                    <Route path="/" element={<Navigate to="agenda" replace />} />
+                    <Route path="agenda" element={<AppointmentsView />} />
+                    <Route path="disponibilidad" element={<AvailabilityView />} />
+                    <Route path="pacientes" element={<PatientsView />} />
+                    <Route path="estadisticas" element={<StatisticsView />} />
+                    <Route path="perfil" element={<ProfileView />} />
                 </Routes>
             </Box>
         </Box>

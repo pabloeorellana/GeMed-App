@@ -1,5 +1,7 @@
 // server.js
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
@@ -11,19 +13,26 @@ import patientRoutes from './routes/patientRoutes.js';
 import appointmentRoutes from './routes/appointmentRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 import clinicalRecordRoutes from './routes/clinicalRecordRoutes.js';
-import statisticsRoutes from './routes/statisticsRoutes.js'
+import statisticsRoutes from './routes/statisticsRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET;
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 if (!JWT_SECRET) {
     console.error("FATAL ERROR: JWT_SECRET no está definida en .env (verificado en server.js)");
     process.exit(1);
 }
+const frontendURL = process.env.FRONTEND_URL; 
 
 const corsOptions = {
-  origin: 'http://localhost:5173',
+  origin: ['http://localhost:5173', frontendURL],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -58,6 +67,8 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
+
 // --- Definición de Rutas ---
 
 // Rutas Públicas
@@ -65,6 +76,8 @@ app.use('/api/public', publicRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/statistics', statisticsRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.post('/api/auth/login', async (req, res) => {
     const { dni, password } = req.body;
@@ -131,8 +144,17 @@ app.get('/api/health', (req, res) => {
 
 // Manejador de Errores Global
 app.use((err, req, res, next) => {
+    console.error('--- ERROR GLOBAL CAPTURADO ---');
+    console.error('Mensaje:', err.message);
+    console.error('Stack:', err.stack);
+    console.error('-----------------------------');
     console.error('ERROR GLOBAL:', err.stack);
-    res.status(500).send('¡Algo salió mal en el servidor!');
+    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+    res.status(statusCode).json({
+        message: err.message,
+        // En desarrollo, podrías querer enviar el stack trace para depurar en el frontend
+        stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    });
 });
 
 app.listen(PORT, () => {

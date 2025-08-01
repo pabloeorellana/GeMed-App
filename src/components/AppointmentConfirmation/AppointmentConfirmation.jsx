@@ -6,6 +6,7 @@ const AppointmentConfirmation = ({ appointmentDetails, onBookAnother }) => {
     if (!appointmentDetails) return null;
 
     const { patient, dateTime } = appointmentDetails;
+    const patientName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
 
     return (
         <Paper elevation={3} sx={{ p: 3, mt: 3, textAlign: 'center' }}>
@@ -32,12 +33,9 @@ const AppointmentConfirmation = ({ appointmentDetails, onBookAnother }) => {
             </Typography>
             {patient.whatsapp && (
                 <Typography variant="body2" sx={{ mb: 2 }}>
-                    Y un mensaje por WhatsApp al número: **{patient.whatsapp}**.
+                    Y un mensaje de recordatorio por WhatsApp al número: **{patient.whatsapp}**.
                 </Typography>
             )}
-            <Typography variant="caption" display="block" sx={{ mb: 2 }}>
-                (Esto es una simulación. En una aplicación real, se enviarían notificaciones y se integraría con calendarios).
-            </Typography>
             <Button variant="contained" onClick={onBookAnother}>
                 Reservar Otro Turno
             </Button>

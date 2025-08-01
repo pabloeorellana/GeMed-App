@@ -4,11 +4,14 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Typography from '@mui/material/Typography'; 
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import AdminDashboardLayout from './pages/AdminDashboardPage/AdminDashboardLayout.jsx';
 
 import AppointmentBookingPage from './pages/AppointmentBookingPage/AppointmentBookingPage.jsx';
 import ProfessionalLoginPage from './pages/ProfessionalLoginPage/ProfessionalLoginPage.jsx';
 import ProfessionalDashboardLayout from './pages/ProfessionalDashboardPage/ProfessionalDashboardLayout.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
+import ProfessionalSelectionPage from './pages/ProfessionalSelectionPage/ProfessionalSelectionPage.jsx';
+
 
 const theme = createTheme({
     palette: {
@@ -43,6 +46,17 @@ const ProtectedProfessionalRoute = ({ children }) => {
     return children;
 };
 
+const ProtectedAdminRoute = ({ children }) => {
+    const { authUser, isAuthenticated, loadingAuth } = useAuth();
+    if (loadingAuth) {
+        return <Typography>Cargando...</Typography>;
+    }
+    if (!isAuthenticated || authUser.user.role !== 'ADMIN') {
+        return <Navigate to="/profesional/login" replace />; // O a una página de "Acceso Denegado"
+    }
+    return children;
+};
+
 function App() {
     return (
         <ThemeProvider theme={theme}>
@@ -51,6 +65,9 @@ function App() {
             <NotificationProvider>
                 <AuthProvider> {}
                     <Routes>
+                        <Route path="/" element={<ProfessionalSelectionPage />} />
+                        <Route path="/reservar/:professionalId" element={<AppointmentBookingPage />} />
+                        <Route path="/profesional/login" element={<ProfessionalLoginPage />} />
                         <Route path="/" element={<AppointmentBookingPage />} />
                         <Route path="/profesional/login" element={<ProfessionalLoginPage />} />
                         <Route
@@ -61,6 +78,16 @@ function App() {
                                 </ProtectedProfessionalRoute>
                             }
                         />
+                        <Route
+                            path="/admin/dashboard/*"
+                            element={
+                                <ProtectedAdminRoute>
+                                    <AdminDashboardLayout />
+                                </ProtectedAdminRoute>
+                                }
+                            />
+                            
+                            <Route path="*" element={<Typography>Página no encontrada (404)</Typography>} />
                         <Route path="*" element={<Typography>Página no encontrada (404)</Typography>} />
                     </Routes>
                 </AuthProvider>

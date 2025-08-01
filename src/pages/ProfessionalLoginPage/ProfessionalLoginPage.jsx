@@ -29,61 +29,54 @@ const ProfessionalLoginPage = () => {
         setRememberMe(event.target.checked);
     };
 
-const handleSubmit = async (event) => {
-    event.preventDefault();
-    setError('');
-    setLoading(true);
-    console.log('LOGIN: Iniciando handleSubmit'); // LOG 1
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        setError('');
+        setLoading(true);
 
-    try {
-        console.log('LOGIN: Intentando fetch a /api/auth/login'); // LOG 2
-        const response = await fetch('http://localhost:3001/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', },
-            body: JSON.stringify({ dni: credentials.dni, password: credentials.password, }),
-        });
-        console.log('LOGIN: Fetch completado, status:', response.status); // LOG 3
+        try {
+            const response = await fetch('http://localhost:3001/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dni: credentials.dni, password: credentials.password }),
+            });
 
-        const data = await response.json();
-        console.log('LOGIN: Datos recibidos del backend:', data); // LOG 4
+            const data = await response.json();
 
-        if (!response.ok) {
-            console.log('LOGIN: Respuesta no OK'); // LOG 5
-            setError(data.message || `Error ${response.status}: No se pudo iniciar sesión.`);
-            // setLoading(false); // Ya está en el finally
-            return;
+            if (!response.ok) {
+                setError(data.message || `Error ${response.status}: No se pudo iniciar sesión.`);
+                return;
+            }
+
+            if (rememberMe) {
+                localStorage.setItem('authToken', data.token);
+                localStorage.setItem('userData', JSON.stringify(data.user));
+            } else {
+                sessionStorage.setItem('authToken', data.token);
+                sessionStorage.setItem('userData', JSON.stringify(data.user));
+            }
+            
+            login(data);
+
+            if (data.user.role === 'ADMIN') {
+                navigate('/admin/dashboard/users');
+            } else if (data.user.role === 'PROFESSIONAL') {
+                navigate('/profesional/dashboard/agenda');
+            } else {
+                setError('Rol de usuario no autorizado para acceder a este sistema.');
+                localStorage.removeItem('authToken');
+                sessionStorage.removeItem('authToken');
+                localStorage.removeItem('userData');
+                sessionStorage.removeItem('userData');
+            }
+
+        } catch (err) {
+            console.error('Error en el login:', err);
+            setError('No se pudo conectar al servidor. Por favor, revise que esté funcionando e intente de nuevo.');
+        } finally {
+            setLoading(false);
         }
-
-        console.log('LOGIN: Login exitoso, guardando token...'); // LOG 6
-        if (rememberMe) {
-            localStorage.setItem('authToken', data.token);
-            localStorage.setItem('userData', JSON.stringify(data.user));
-        } else {
-            sessionStorage.setItem('authToken', data.token);
-            sessionStorage.setItem('userData', JSON.stringify(data.user));
-        }
-        
-        login(data);
-        console.log('LOGIN: Token guardado, redirigiendo...'); // LOG 7
-
-        if (data.user.role === 'PROFESSIONAL' || data.user.role === 'ADMIN') {
-            navigate('/profesional/dashboard/agenda');
-        } else {
-            setError('Rol de usuario no autorizado para acceder a este panel.');
-            localStorage.removeItem('authToken'); // Limpiar
-            sessionStorage.removeItem('authToken');
-            localStorage.removeItem('userData');
-            sessionStorage.removeItem('userData');
-        }
-
-    } catch (err) {
-        console.error('LOGIN: Error en try-catch:', err); // LOG 8
-        setError('No se pudo conectar al servidor o error en la respuesta. Intente más tarde.');
-    } finally {
-        console.log('LOGIN: Ejecutando finally, setLoading a false'); // LOG 9
-        setLoading(false);
-    }
-};
+    };
 
 
 
@@ -104,7 +97,7 @@ const handleSubmit = async (event) => {
                 }}
             >
                 <Box component="img" src={logoUrl} alt="NutriSmart Logo" sx={{ height: 80, mb: 2, objectFit: 'contain' }} />
-                <Typography component="h1" variant="h5" sx={{ mb: 1 }}>NutriSmart</Typography>
+                <Typography component="h1" variant="h5" sx={{ mb: 1 }}>Gestion de Turnos y Pacientes</Typography>
                 <Typography component="h2" variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>Bienvenido</Typography>
 
                 {error && <Alert severity="error" sx={{ width: '100%', mb: 2 }}>{error}</Alert>}

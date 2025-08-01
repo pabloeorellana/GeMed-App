@@ -21,6 +21,7 @@ import { format, parseISO, setMinutes, setSeconds, setMilliseconds, startOfWeek,
 import { es as fnsEsLocale } from 'date-fns/locale';
 import { LocalizationProvider, DateTimePicker, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { useNotification } from '../../../context/NotificationContext';
 
 const statusColors = {
     SCHEDULED: { backgroundColor: '#3f51b5', color: 'white', label: 'Programado' },
@@ -60,6 +61,8 @@ const AppointmentsView = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const calendarRef = useRef(null);
+    const { showNotification } = useNotification();
+    const [modalActionLoading, setModalActionLoading] = useState(false);
 
     const getInitials = (name) => {
         if (!name || typeof name !== 'string') return '';
@@ -150,25 +153,32 @@ const AppointmentsView = () => {
             try {
                 await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/status`, {
                     method: 'PUT', body: JSON.stringify({ status: newStatus }),
-                });
+                })
+                showNotification('Estado del turno actualizado.', 'success');
+
                 const updatedEvents = allEvents.map(e => e.id === selectedEvent.id ? { ...e, extendedProps: { ...e.extendedProps, status: newStatus }, backgroundColor: statusColors[newStatus]?.backgroundColor, borderColor: statusColors[newStatus]?.borderColor } : e);
                 setAllEvents(updatedEvents);
                 setSelectedEvent(prev => ({...prev, status: newStatus}));
-            } catch (err) { alert(`Error cambiando estado: ${err.message}`); }
+            } catch (err) { showNotification(`Error cambiando estado: ${err.message}`, 'error');}
         }
     };
     
     const handleSaveProfessionalNotes = async () => {
         if (selectedEvent) {
+            setModalActionLoading(true);
             try {
                 await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/notes`, {
                     method: 'PUT', body: JSON.stringify({ professionalNotes: professionalNotesModal }),
-                });
+                })
+                showNotification("Notas guardadas exitosamente.", "success");
                 const updatedEvents = allEvents.map(e => e.id === selectedEvent.id ? { ...e, extendedProps: { ...e.extendedProps, professionalNotes: professionalNotesModal } } : e);
                 setAllEvents(updatedEvents);
                 setSelectedEvent(prev => ({...prev, professionalNotes: professionalNotesModal}));
-                alert("Notas guardadas exitosamente.");
-            } catch (err) { alert(`Error guardando notas: ${err.message}`); }
+                 showNotification("Notas guardadas.", "success");
+            } catch (err) {showNotification(`Error al guardar notas: ${err.message}`, "error");}
+            finally {
+                setModalActionLoading(false);
+            }
         }
     };
 
@@ -297,9 +307,10 @@ const AppointmentsView = () => {
             try {
                 await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}`, { method: 'DELETE' });
                 setAllEvents(prev => prev.filter(e => e.id !== selectedEvent.id));
+                showNotification('Turno eliminado correctamente.', 'success');
                 handleCloseDeleteAppointmentModal();
                 handleCloseDetailModal();
-            } catch (err) { alert(`Error eliminando turno: ${err.message}`); }
+            } catch (err) {showNotification(`Error eliminando turno: ${err.message}`, 'error'); }
         }
     };
 
@@ -327,7 +338,8 @@ const AppointmentsView = () => {
             try {
                 await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/reprogram`, {
                     method: 'PUT', body: JSON.stringify({ newDateTime: newDateTimeForReprogram.toISOString() }),
-                });
+                })
+                    showNotification('Turno reprogramado exitosamente.', 'success');
 
                 const calendarApi = calendarRef.current.getApi();
                 const eventToUpdate = calendarApi.getEventById(selectedEvent.id);
@@ -349,7 +361,7 @@ const AppointmentsView = () => {
                 );
 
                 handleCloseDetailModal();
-            } catch (err) { alert(`Error reprogramando turno: ${err.message}`); }
+            } catch (err) {showNotification(`Error reprogramando turno: ${err.message}`, 'error');}
         }
     };
 
@@ -415,12 +427,12 @@ const AppointmentsView = () => {
                                 </Grid>
                                 <Grid item>
                                     <TextField label="Notas del Profesional sobre el Turno" multiline rows={3} fullWidth variant="outlined" value={professionalNotesModal} onChange={(e) => setProfessionalNotesModal(e.target.value)} sx={{ my: 1 }}/>
-                                    <Button onClick={handleSaveProfessionalNotes} size="small" variant="text" sx={{display:'block', ml:'auto'}}>Guardar Notas</Button>
+                                    <Button onClick={handleSaveProfessionalNotes} size="small" disabled={modalActionLoading}>{modalActionLoading ? <CircularProgress size={20} /> : 'Guardar Notas'}</Button>
                                 </Grid>
                                 <Grid item sx={{mt:1}}>
                                     <FormControl fullWidth>
                                         <InputLabel id="status-select-label-modal">Cambiar Estado</InputLabel>
-                                        <Select labelId="status-select-label-modal" value={selectedEvent.status} label="Cambiar Estado" onChange={handleChangeStatus}>
+                                        <Select labelId="status-select-label-modal" value={selectedEvent.status} disabled={modalActionLoading} label="Cambiar Estado" onChange={handleChangeStatus}>
                                             {availableStatuses.map(statusKey => (<MenuItem key={statusKey} value={statusKey}>{statusColors[statusKey]?.label}</MenuItem>))}
                                         </Select>
                                     </FormControl>

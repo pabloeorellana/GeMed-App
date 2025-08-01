@@ -80,12 +80,24 @@ const createUser = async (dni, email, password, fullName, role, specialty = null
     }
 };
 
+const passwordToHash = 'admin'; // La contraseña que quieres hashear
+const saltRounds = 10;
 
-createUser(
-'11223344P',
-'profesional1@nutrismart.com',
-'ProfPass123!',
-'Dr. Ejemplo Uno',
-'PROFESSIONAL',
-'Nutrición Deportiva'
-).catch(err => console.error("Fallo la ejecución de createUser para Profesional:", err));
+bcrypt.hash(passwordToHash, saltRounds, (err, hash) => {
+    if (err) {
+        console.error('Error al generar el hash:', err);
+        return;
+    }
+    console.log(`\n--- Hash para la contraseña "${passwordToHash}" ---`);
+    console.log(hash); // ¡Copia esta línea!
+    console.log("------------------------------------------\n");
+});
+
+//createUser(
+//'11223344P',
+//'profesional1@nutrismart.com',
+//'ProfPass123!',
+//'Dr. Ejemplo Uno',
+//'PROFESSIONAL',
+//'Nutrición Deportiva'
+//).catch(err => console.error("Fallo la ejecución de createUser para Profesional:", err));

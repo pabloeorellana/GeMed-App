@@ -1,126 +1,91 @@
+// src/pages/ProfessionalDashboardPage/views/ProfileView.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import authFetch from '../../../utils/authFetch';
 import { useAuth } from '../../../context/AuthContext';
 import {
-    Box,
-    Typography,
-    Paper,
-    Grid,
-    TextField,
-    Button,
-    CircularProgress,
-    Alert,
-    Avatar,
-    Stack
+    Box, Typography, Paper, Grid, TextField, Button, CircularProgress,
+    Alert, Avatar, Stack, Dialog, DialogTitle, DialogContent,
+    DialogActions, Divider, Chip, InputAdornment, IconButton
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import { useNotification } from '../../../context/NotificationContext';
 
 const ProfileView = () => {
-    const { authUser, loadingAuth } = useAuth();
+    const { showNotification } = useNotification();
+    const { authUser, login: updateAuthContextUser, loadingAuth } = useAuth();
     const [profileData, setProfileData] = useState({
-        dni: '',
-        fullName: '',
-        email: '',
-        phone: '',
-        specialty: '',
-        description: '',
-        profileImageUrl: '',
-        profileImageFile: null,
+        dni: '', fullName: '', email: '', phone: '', specialty: '',
+        description: '', profileImageUrl: '', profileImageFile: null,
     });
     const [initialProfileData, setInitialProfileData] = useState({});
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
     const fileInputRef = useRef(null);
+    const [openPasswordModal, setOpenPasswordModal] = useState(false);
+    const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
+    const [passwordErrors, setPasswordErrors] = useState({});
+    const [passwordLoading, setPasswordLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
-    console.log('PROFILE_VIEW: Estado inicial de authUser:', authUser, 'loadingAuth:', loadingAuth);
+    const handleClickShowPassword = () => setShowPassword((show) => !show);
+    const handleMouseDownPassword = (event) => {
+        event.preventDefault();
+    };
 
     const fetchProfile = useCallback(async () => {
-        console.log('PROFILE_VIEW (fetchProfile): authUser:', authUser, 'loadingAuth:', loadingAuth);
-
-        if (loadingAuth) {
-            console.log('PROFILE_VIEW (fetchProfile): loadingAuth es true, retornando.');
-            return;
-        }
-
+        if (loadingAuth) return;
         if (!authUser?.user?.id) {
-            console.log('PROFILE_VIEW (fetchProfile): No hay authUser.user.id. Seteando error.');
             setLoading(false);
             setError("Por favor, inicie sesión para ver su perfil.");
             return;
         }
-
         setLoading(true);
         setError('');
-        setSuccess('');
         try {
-            console.log('PROFILE_VIEW (fetchProfile): Intentando fetch de datos del perfil.');
-            const userDataPromise = authFetch('http://localhost:3001/api/users/me');
-            let professionalDataPromise;
-
-            if (authUser.user.role === 'PROFESSIONAL') {
-                console.log('PROFILE_VIEW (fetchProfile): Es profesional, intentando fetch de datos profesionales.');
-                professionalDataPromise = authFetch('http://localhost:3001/api/users/professionals/me');
-            } else {
-                professionalDataPromise = Promise.resolve(null);
-            }
+            const userDataPromise = authFetch(`http://localhost:3001/api/users/me`);
+            let professionalDataPromise = authUser.user.role === 'PROFESSIONAL'
+                ? authFetch(`http://localhost:3001/api/users/professionals/me`)
+                : Promise.resolve(null);
             
-            const [userData, professionalDataResponse] = await Promise.all([
-                userDataPromise,
-                professionalDataPromise
-            ]);
-            console.log('PROFILE_VIEW (fetchProfile): userData recibida:', userData);
-            console.log('PROFILE_VIEW (fetchProfile): professionalDataResponse recibida:', professionalDataResponse);
-
-
+            const [userData, professionalDataResponse] = await Promise.all([userDataPromise, professionalDataPromise]);
             const professionalSpecificData = professionalDataResponse || {};
 
             const dataToSet = {
-                dni: userData.dni || '',
-                fullName: userData.fullName || '',
-                email: userData.email || '',
-                phone: userData.phone || '',
+                dni: userData.dni || '', fullName: userData.fullName || '',
+                email: userData.email || '', phone: userData.phone || '',
                 specialty: professionalSpecificData.specialty || '',
-                description: professionalSpecificData.description || userData.description || '',
+                description: professionalSpecificData.description || '',
                 profileImageUrl: userData.profileImageUrl || '',
                 profileImageFile: null,
             };
-            console.log('PROFILE_VIEW (fetchProfile): Datos para setear en perfil:', dataToSet);
             setProfileData(dataToSet);
             setInitialProfileData(dataToSet);
         } catch (err) {
-            console.error("PROFILE_VIEW (fetchProfile): Error cargando perfil:", err);
             setError(err.message || "Error al cargar el perfil.");
         } finally {
-            console.log('PROFILE_VIEW (fetchProfile): setLoading(false) en finally.');
             setLoading(false);
         }
     }, [authUser, loadingAuth]);
 
     useEffect(() => {
-        console.log('PROFILE_VIEW: useEffect[fetchProfile] - llamando a fetchProfile.');
         fetchProfile();
     }, [fetchProfile]);
 
     const handleChange = (event) => {
         const { name, value } = event.target;
         setProfileData(prev => ({ ...prev, [name]: value }));
-        if (success) setSuccess('');
-        if (error) setError('');
+        setError('');
     };
 
     const handleImageChange = (event) => {
         if (event.target.files && event.target.files[0]) {
             const file = event.target.files[0];
-            setProfileData(prev => ({
-                ...prev,
-                profileImageFile: file,
-                profileImageUrl: URL.createObjectURL(file)
-            }));
-            if (success) setSuccess('');
-            if (error) setError('');
+            setProfileData(prev => ({ ...prev, profileImageFile: file, profileImageUrl: URL.createObjectURL(file) }));
+            setError('');
         }
     };
 
@@ -135,258 +100,208 @@ const ProfileView = () => {
 
     const handleToggleEdit = () => {
         if (isEditing && hasChanges()) {
-            if (window.confirm("Tiene cambios sin guardar. ¿Desea descartarlos y salir del modo edición?")) {
+            if (window.confirm("Tiene cambios sin guardar. ¿Desea descartarlos?")) {
                 setProfileData(initialProfileData);
-                setSuccess('');
-                setError('');
-                setIsEditing(false);
+                setError(''); setIsEditing(false);
             }
         } else {
-            setIsEditing(!isEditing);
-            setError('');
-            setSuccess('');
+            setIsEditing(!isEditing); setError('');
         }
     };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
         if (!hasChanges()) {
-            setIsEditing(false);
-            return;
+            setIsEditing(false); return;
         }
         setLoading(true);
         setError('');
-        setSuccess('');
-        console.log('PROFILE_VIEW (handleSubmit): Guardando perfil (simulado):', profileData);
-
         try {
-            const userDataToUpdate = {
-                fullName: profileData.fullName,
-                email: profileData.email,
-                phone: profileData.phone,
-            };
-            const professionalDataToUpdate = {
-                specialty: profileData.specialty,
-                description: profileData.description,
-            };
+            const formData = new FormData();
+            formData.append('fullName', profileData.fullName);
+            formData.append('email', profileData.email);
+            formData.append('phone', profileData.phone);
             
-            console.log('PROFILE_VIEW (handleSubmit): userDataToUpdate:', userDataToUpdate);
             if (authUser?.user?.role === 'PROFESSIONAL') {
-                 console.log('PROFILE_VIEW (handleSubmit): professionalDataToUpdate:', professionalDataToUpdate);
+                formData.append('specialty', profileData.specialty);
+                formData.append('description', profileData.description);
+            }
+            if (profileData.profileImageFile) {
+                formData.append('profileImage', profileData.profileImageFile);
             }
 
-            const updatedUser = await authFetch('http://localhost:3001/api/users/me', {
+            const response = await authFetch('http://localhost:3001/api/users/me', {
                 method: 'PUT',
-                body: JSON.stringify(userDataToUpdate),
+                body: formData,
+                headers: { 'Content-Type': undefined },
             });
-            console.log('PROFILE_VIEW (handleSubmit): updatedUser response:', updatedUser);
 
-
-            if (authUser?.user?.role === 'PROFESSIONAL') {
-                await authFetch('http://localhost:3001/api/users/professionals/me', {
-                    method: 'PUT',
-                    body: JSON.stringify(professionalDataToUpdate),
-                });
-                console.log('PROFILE_VIEW (handleSubmit): professional data updated.');
-            }
-            
             await fetchProfile();
-            setSuccess('Perfil actualizado exitosamente.');
+            showNotification('Perfil actualizado exitosamente', 'success');
             setIsEditing(false);
-             if (updatedUser && authUser && authUser.login) {
-                console.log('PROFILE_VIEW (handleSubmit): Actualizando AuthContext user.');
-                authUser.login({ token: authUser.token, user: { ...authUser.user, ...updatedUser } });
-            }
 
+            if (response && response.user && authUser && updateAuthContextUser) {
+                updateAuthContextUser({ token: authUser.token, user: { ...authUser.user, ...response.user } });
+            }
         } catch (err) {
-            setError(err.message || 'Error al actualizar el perfil. Intente nuevamente.');
-            console.error("PROFILE_VIEW (handleSubmit): Error al guardar perfil:", err);
+            showNotification(err.message || 'Error al actualizar el perfil', 'error');
         } finally {
             setLoading(false);
-            console.log('PROFILE_VIEW (handleSubmit): setLoading(false) en finally.');
+        }
+    };
+
+    const handleOpenPasswordModal = () => setOpenPasswordModal(true);
+    const handleClosePasswordModal = () => {
+        setOpenPasswordModal(false);
+        setPasswordData({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
+        setPasswordErrors({});
+    };
+    const handlePasswordChange = (event) => {
+        const { name, value } = event.target;
+        setPasswordData(prev => ({ ...prev, [name]: value }));
+        if (passwordErrors[name]) setPasswordErrors(prev => ({ ...prev, [name]: null }));
+    };
+    const handlePasswordSubmit = async (event) => {
+        event.preventDefault();
+        const errors = {};
+        if (!passwordData.currentPassword) errors.currentPassword = 'Requerido';
+        if (!passwordData.newPassword) errors.newPassword = 'Requerido';
+        if (passwordData.newPassword.length < 6) errors.newPassword = 'Debe tener al menos 6 caracteres.';
+        if (passwordData.newPassword !== passwordData.confirmNewPassword) errors.confirmNewPassword = 'Las contraseñas no coinciden.';
+        setPasswordErrors(errors);
+        if (Object.keys(errors).length > 0) return;
+        setPasswordLoading(true);
+        try {
+            await authFetch('http://localhost:3001/api/users/me/change-password', {
+                method: 'PUT',
+                body: JSON.stringify({ currentPassword: passwordData.currentPassword, newPassword: passwordData.newPassword }),
+            });
+            showNotification('Contraseña actualizada exitosamente.', 'success');
+            handleClosePasswordModal();
+        } catch (err) {
+            showNotification(err.message || 'Error al cambiar la contraseña.', 'error');
+            if (err.message.toLowerCase().includes('actual es incorrecta')) {
+                setPasswordErrors(prev => ({...prev, currentPassword: err.message}));
+            }
+        } finally {
+            setPasswordLoading(false);
         }
     };
 
     const getInitials = (name) => {
         if (!name) return '';
         const nameParts = name.split(' ');
-        if (nameParts.length > 1) {
-            return `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
-        }
+        if (nameParts.length > 1) return `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
         return name.substring(0, 2).toUpperCase();
     };
 
     if (loadingAuth) {
-        console.log('PROFILE_VIEW (render): loadingAuth es true, mostrando spinner de autenticación.');
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-                <CircularProgress />
-                <Typography sx={{ml: 2}}>Verificando autenticación...</Typography>
-            </Box>
-        );
+        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><CircularProgress /><Typography sx={{ml: 2}}>Verificando autenticación...</Typography></Box>;
     }
-
     if (error) {
-        console.log('PROFILE_VIEW (render): Hay un error, mostrando Alert:', error);
         return <Alert severity="warning" sx={{ m: 2 }}>{error}</Alert>;
     }
-    
     if (loading && !initialProfileData.dni) { 
-        console.log('PROFILE_VIEW (render): loading de perfil es true, mostrando spinner de perfil.');
-         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-                <CircularProgress />
-                <Typography sx={{ml: 2}}>Cargando perfil...</Typography>
-            </Box>
-        );
+         return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><CircularProgress /><Typography sx={{ml: 2}}>Cargando perfil...</Typography></Box>;
     }
-    
     if (!authUser && !loadingAuth) {
-        console.log('PROFILE_VIEW (render): No hay authUser después de que loadingAuth es false.');
         return <Alert severity="error" sx={{ m: 2 }}>Error de autenticación. Por favor, intente iniciar sesión de nuevo.</Alert>;
     }
 
     return (
-        <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 700, margin: 'auto' }}>
-            <Typography variant="h5" gutterBottom sx={{ mb: 3, textAlign: 'center' }}>
-                Mi Perfil Profesional
-            </Typography>
-            {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-            <Box component="form" onSubmit={handleSubmit} noValidate>
-                <Grid container spacing={3} direction="column">
-                    <Grid item xs={12} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <Avatar
-                            src={profileData.profileImageUrl || undefined}
-                            alt={profileData.fullName}
-                            sx={{ width: 120, height: 120, mb: 1, fontSize: '3rem' }}
-                        >
-                            {!profileData.profileImageUrl && getInitials(profileData.fullName)}
-                        </Avatar>
-                        {isEditing && (
-                            <>
-                                <input
-                                    accept="image/*"
-                                    type="file"
-                                    onChange={handleImageChange}
-                                    ref={fileInputRef}
-                                    style={{ display: 'none' }}
-                                    id="profile-image-upload"
-                                />
-                                <label htmlFor="profile-image-upload">
-                                    <Button
-                                        variant="outlined"
-                                        component="span"
-                                        startIcon={<PhotoCamera />}
-                                        size="small"
-                                        disabled={loading}
-                                    >
-                                        Cambiar Foto
-                                    </Button>
-                                </label>
-                            </>
-                        )}
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            label="DNI"
-                            value={profileData.dni}
-                            fullWidth
-                            InputProps={{ readOnly: true }}
-                            variant="filled"
-                            helperText="El DNI no puede ser modificado."
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            required
-                            fullWidth
-                            name="fullName"
-                            label="Nombre Completo"
-                            value={profileData.fullName}
-                            onChange={handleChange}
-                            disabled={!isEditing || loading}
-                            variant={isEditing ? "outlined" : "filled"}
-                            InputProps={{ readOnly: !isEditing }}
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            required
-                            fullWidth
-                            name="email"
-                            label="Correo Electrónico"
-                            type="email"
-                            value={profileData.email}
-                            onChange={handleChange}
-                            disabled={!isEditing || loading}
-                            variant={isEditing ? "outlined" : "filled"}
-                            InputProps={{ readOnly: !isEditing }}
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            fullWidth
-                            name="phone"
-                            label="Teléfono"
-                            value={profileData.phone}
-                            onChange={handleChange}
-                            disabled={!isEditing || loading}
-                            variant={isEditing ? "outlined" : "filled"}
-                            InputProps={{ readOnly: !isEditing }}
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            fullWidth
-                            name="specialty"
-                            label="Especialidad"
-                            value={profileData.specialty}
-                            onChange={handleChange}
-                            disabled={!isEditing || loading}
-                            variant={isEditing ? "outlined" : "filled"}
-                            InputProps={{ readOnly: !isEditing }}
-                        />
-                    </Grid>
-                    <Grid item xs={12}>
-                        <TextField
-                            fullWidth
-                            name="description"
-                            label="Descripción Profesional"
-                            multiline
-                            rows={4}
-                            value={profileData.description}
-                            onChange={handleChange}
-                            disabled={!isEditing || loading}
-                            variant={isEditing ? "outlined" : "filled"}
-                            InputProps={{ readOnly: !isEditing }}
-                        />
-                    </Grid>
-                    <Grid item xs={12} sx={{ mt: 2 }}>
-                        <Stack direction="row" spacing={2} justifyContent="flex-end">
-                            <Button
-                                variant={isEditing ? "outlined" : "contained"}
-                                onClick={handleToggleEdit}
-                                startIcon={isEditing ? null : <EditIcon />}
-                                disabled={loading && isEditing}
-                            >
-                                {isEditing ? "Cancelar" : "Actualizar Datos"}
-                            </Button>
+        <>
+            <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 700, margin: 'auto' }}>
+                <Typography variant="h5" gutterBottom sx={{ mb: 3, textAlign: 'center' }}>Mi Perfil Profesional</Typography>
+                <Box component="form" onSubmit={handleSubmit} noValidate>
+                    <Grid container spacing={3} direction="column">
+                        <Grid item xs={12} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <Avatar src={profileData.profileImageUrl || undefined} alt={profileData.fullName} sx={{ width: 120, height: 120, mb: 1, fontSize: '3rem' }}>
+                                {!profileData.profileImageUrl && getInitials(profileData.fullName)}
+                            </Avatar>
                             {isEditing && (
-                                <Button
-                                    type="submit"
-                                    variant="contained"
-                                    color="primary"
-                                    disabled={loading || !hasChanges()}
-                                    startIcon={loading ? <CircularProgress size={20} color="inherit"/> : null}
-                                >
-                                    {loading ? 'Guardando...' : 'Guardar Cambios'}
-                                </Button>
+                                <>
+                                    <input accept="image/*" type="file" onChange={handleImageChange} ref={fileInputRef} style={{ display: 'none' }} id="profile-image-upload" />
+                                    <label htmlFor="profile-image-upload">
+                                        <Button variant="outlined" component="span" startIcon={<PhotoCamera />} size="small" disabled={loading}>Cambiar Foto</Button>
+                                    </label>
+                                </>
                             )}
-                        </Stack>
+                        </Grid>
+                        <Grid item xs={12}><TextField label="DNI" value={profileData.dni} fullWidth InputProps={{ readOnly: true }} variant="filled" helperText="El DNI no puede ser modificado."/></Grid>
+                        <Grid item xs={12}><TextField required fullWidth name="fullName" label="Nombre Completo" value={profileData.fullName} onChange={handleChange} disabled={!isEditing || loading} variant={isEditing ? "outlined" : "filled"} InputProps={{ readOnly: !isEditing }}/></Grid>
+                        <Grid item xs={12}><TextField required fullWidth name="email" label="Correo Electrónico" type="email" value={profileData.email} onChange={handleChange} disabled={!isEditing || loading} variant={isEditing ? "outlined" : "filled"} InputProps={{ readOnly: !isEditing }}/></Grid>
+                        <Grid item xs={12}><TextField fullWidth name="phone" label="Teléfono" value={profileData.phone} onChange={handleChange} disabled={!isEditing || loading} variant={isEditing ? "outlined" : "filled"} InputProps={{ readOnly: !isEditing }}/></Grid>
+                        <Grid item xs={12}><TextField fullWidth name="specialty" label="Especialidad" value={profileData.specialty} onChange={handleChange} disabled={!isEditing || loading} variant={isEditing ? "outlined" : "filled"} InputProps={{ readOnly: !isEditing }}/></Grid>
+                        <Grid item xs={12}><TextField fullWidth name="description" label="Descripción Profesional" multiline rows={4} value={profileData.description} onChange={handleChange} disabled={!isEditing || loading} variant={isEditing ? "outlined" : "filled"} InputProps={{ readOnly: !isEditing }}/></Grid>
+                        <Grid item xs={12} sx={{ mt: 2 }}>
+                            <Stack direction="row" spacing={2} justifyContent="flex-end" alignItems="center">
+                                <Button variant="text" onClick={handleOpenPasswordModal} disabled={isEditing}>Cambiar Contraseña</Button>
+                                <Button variant={isEditing ? "outlined" : "contained"} onClick={handleToggleEdit} startIcon={isEditing ? null : <EditIcon />} disabled={loading && isEditing}>{isEditing ? "Cancelar" : "Modificar Datos"}</Button>
+                                {isEditing && (<Button type="submit" variant="contained" color="primary" disabled={loading || !hasChanges()} startIcon={loading ? <CircularProgress size={20} color="inherit"/> : null}>{loading ? 'Guardando...' : 'Guardar Cambios'}</Button>)}
+                            </Stack>
+                        </Grid>
                     </Grid>
-                </Grid>
-            </Box>
-        </Paper>
+                </Box>
+            </Paper>
+            <Dialog open={openPasswordModal} onClose={handleClosePasswordModal} maxWidth="xs" fullWidth>
+                <DialogTitle>Cambiar Contraseña</DialogTitle>
+                <DialogContent>
+                    <Box component="form" id="password-form" onSubmit={handlePasswordSubmit} sx={{pt:1}}>
+                        <TextField
+                            autoFocus margin="normal" required fullWidth name="currentPassword" label="Contraseña Actual"
+                            type={showPassword ? 'text' : 'password'} value={passwordData.currentPassword}
+                            onChange={handlePasswordChange} error={!!passwordErrors.currentPassword}
+                            helperText={passwordErrors.currentPassword} disabled={passwordLoading}
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton aria-label="toggle password visibility" onClick={handleClickShowPassword} onMouseDown={handleMouseDownPassword} edge="end">
+                                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
+                        <TextField
+                            margin="normal" required fullWidth name="newPassword" label="Nueva Contraseña"
+                            type={showPassword ? 'text' : 'password'} value={passwordData.newPassword}
+                            onChange={handlePasswordChange} error={!!passwordErrors.newPassword}
+                            helperText={passwordErrors.newPassword} disabled={passwordLoading}
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton aria-label="toggle password visibility" onClick={handleClickShowPassword} onMouseDown={handleMouseDownPassword} edge="end">
+                                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
+                        <TextField
+                            margin="normal" required fullWidth name="confirmNewPassword" label="Confirmar Nueva Contraseña"
+                            type={showPassword ? 'text' : 'password'} value={passwordData.confirmNewPassword}
+                            onChange={handlePasswordChange} error={!!passwordErrors.confirmNewPassword}
+                            helperText={passwordErrors.confirmNewPassword} disabled={passwordLoading}
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton aria-label="toggle password visibility" onClick={handleClickShowPassword} onMouseDown={handleMouseDownPassword} edge="end">
+                                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleClosePasswordModal} disabled={passwordLoading}>Cancelar</Button>
+                    <Button type="submit" form="password-form" variant="contained" disabled={passwordLoading}>
+                        {passwordLoading ? <CircularProgress size={24} color="inherit" /> : 'Actualizar Contraseña'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </>
     );
 };
 

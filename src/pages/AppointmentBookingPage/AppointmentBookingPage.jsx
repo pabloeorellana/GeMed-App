@@ -4,15 +4,18 @@ import {
     Container, Typography, Box, CssBaseline, AppBar, Toolbar, Alert, TextField,
     Button, CircularProgress, Paper, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
+import { useParams } from 'react-router-dom';
 import AvailabilityCalendar from '../../components/AvailabilityCalendar/AvailabilityCalendar.jsx';
 import PatientForm from '../../components/PatientForm/PatientForm.jsx';
 import AppointmentConfirmation from '../../components/AppointmentConfirmation/AppointmentConfirmation.jsx';
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 import SearchIcon from '@mui/icons-material/Search';
 
-const PROFESSIONAL_ID_TO_BOOK = 'e717f22e-cac8-4b0b-8e43-f2dd7023f085'; // <-- Usa un ID de profesional que exista en tu DB
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+//const PROFESSIONAL_ID_TO_BOOK = 'prof_uuid_01'; // Usa un ID de profesional que exista en tu DB
 
 const AppointmentBookingPage = () => {
+     const { professionalId } = useParams();
     const [currentStep, setCurrentStep] = useState(1);
     const [selectedDateTime, setSelectedDateTime] = useState(null);
     const [confirmedAppointment, setConfirmedAppointment] = useState(null);
@@ -36,7 +39,7 @@ const AppointmentBookingPage = () => {
         setDniLookupPerformed(true);
 
         try {
-            const response = await fetch(`http://localhost:3001/api/public/patients/lookup?dni=${dniInput.trim()}`);
+            const response = await fetch(`${API_URL}/api/public/patients/lookup?dni=${dniInput.trim()}`);
             if (response.status === 404) {
                 setRecognizedPatient({ dni: dniInput.trim() });
                 throw new Error("DNI no encontrado. Por favor, complete sus datos.");
@@ -67,12 +70,12 @@ const AppointmentBookingPage = () => {
         setSubmissionError('');
         try {
             const payload = {
-                professionalId: PROFESSIONAL_ID_TO_BOOK,
+                professionalId: professionalId,
                 dateTime: appointmentDateTime.toISOString(),
                 patientDetails: patientDetails
             };
 
-            const response = await fetch('http://localhost:3001/api/public/appointments', {
+            const response = await fetch(`${API_URL}/api/public/appointments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -92,6 +95,7 @@ const AppointmentBookingPage = () => {
         } catch (error) {
             console.error("Error al confirmar el turno:", error);
             setSubmissionError(error.message);
+            alert(`Error: ${error.message}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -128,17 +132,8 @@ const AppointmentBookingPage = () => {
                     </Typography>
                 </Toolbar>
             </AppBar>
-
-            <Dialog
-                open={welcomeModalOpen}
-                disableEscapeKeyDown
-                aria-labelledby="welcome-dialog-title"
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle id="welcome-dialog-title" sx={{ textAlign: 'center', pt: 3 }}>
-                    Bienvenido a NutriSmart
-                </DialogTitle>
+            <Dialog open={welcomeModalOpen} disableEscapeKeyDown aria-labelledby="welcome-dialog-title" maxWidth="sm" fullWidth>
+                <DialogTitle id="welcome-dialog-title" sx={{ textAlign: 'center', pt: 3 }}>Bienvenido a NutriSmart</DialogTitle>
                 <DialogContent>
                     <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
                         <Typography variant="h6" gutterBottom>¿Ya eres paciente?</Typography>
@@ -187,21 +182,15 @@ const AppointmentBookingPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-
             <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
                 <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     {currentStep === 1 && (
                         <>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Seleccione un Día y Horario
-                            </Typography>
+                            <Typography variant="h4" component="h1" gutterBottom>Seleccione un Día y Horario</Typography>
                             <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: 'center', maxWidth: '700px' }}>
                                 Haga clic sobre un horario disponible para comenzar su reserva.
                             </Typography>
-                            <AvailabilityCalendar
-                                onSlotSelect={handleSlotSelected}
-                                professionalId={PROFESSIONAL_ID_TO_BOOK}
-                            />
+                            <AvailabilityCalendar onSlotSelect={handleSlotSelected} professionalId={professionalId} />
                         </>
                     )}
                     {currentStep === 2 && (
@@ -218,10 +207,7 @@ const AppointmentBookingPage = () => {
                     )}
                     {currentStep === 3 && (
                          <Box sx={{ width: '100%', maxWidth: '700px' }}>
-                            <AppointmentConfirmation
-                                appointmentDetails={confirmedAppointment}
-                                onBookAnother={handleBookAnother}
-                            />
+                            <AppointmentConfirmation appointmentDetails={confirmedAppointment} onBookAnother={handleBookAnother} />
                         </Box>
                     )}
                 </Box>

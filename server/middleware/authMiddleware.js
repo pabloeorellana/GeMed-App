@@ -8,6 +8,7 @@ if (!JWT_SECRET) {
 }
 
 export const protect = async (req, res, next) => {
+        console.log(`AUTH_MIDDLEWARE (protect): Verificando ruta ${req.originalUrl}`); // LOG
     let token;
 
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
@@ -17,6 +18,7 @@ export const protect = async (req, res, next) => {
             // Verificacion del token
             const decoded = jwt.verify(token, JWT_SECRET);
             req.user = decoded;
+            console.log(`AUTH_MIDDLEWARE (protect): Token verificado para userId: ${req.user.userId}`); // LOG
             next(); 
         } catch (error) {
             console.error('Error de autenticación de token:', error.message);

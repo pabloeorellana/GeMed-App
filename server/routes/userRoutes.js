@@ -1,18 +1,24 @@
+// server/routes/userRoutes.js
 import express from 'express';
-import { getMyUserProfile, updateMyUserProfile, getMyProfessionalProfile, updateMyProfessionalProfile } from '../controllers/userController.js';
+import {
+    getMyUserProfile,
+    updateMyUserProfile,
+    getMyProfessionalProfile,
+    changeMyPassword,
+} from '../controllers/userController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
+import { uploadAvatar } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
-    // Rutas para el perfil del usuario general (tabla Users)
 router.route('/me')
-    .get(protect, getMyUserProfile) 
-    .put(protect, updateMyUserProfile); 
+    .get(protect, getMyUserProfile)
+    .put(protect, uploadAvatar, updateMyUserProfile);
 
-    // Rutas específicas para el perfil profesional (tabla Professionals)
-    // Solo accesibles por usuarios con rol 'PROFESSIONAL' (y quizás 'ADMIN')
+router.route('/me/change-password')
+    .put(protect, changeMyPassword);
+
 router.route('/professionals/me')
-    .get(protect, authorize('PROFESSIONAL', 'ADMIN'), getMyProfessionalProfile)
-    .put(protect, authorize('PROFESSIONAL', 'ADMIN'), updateMyProfessionalProfile);
+    .get(protect, authorize('PROFESSIONAL', 'ADMIN'), getMyProfessionalProfile);
 
 export default router;

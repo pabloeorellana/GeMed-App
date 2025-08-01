@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { format } from 'date-fns';
 
 // @desc    Obtener los turnos de un profesional para un rango de fechas
 // @route   GET /api/appointments
@@ -43,6 +44,9 @@ export const getAppointments = async (req, res) => {
 // @route   POST /api/appointments/manual
 // @access  Privado (PROFESSIONAL, ADMIN)
 export const createManualAppointment = async (req, res) => {
+        console.log('APPOINTMENT_CONTROLLER (createManual): Endpoint alcanzado.'); // LOG 1
+    console.log('APPOINTMENT_CONTROLLER (createManual): req.user del token:', req.user); // LOG 2
+    console.log('APPOINTMENT_CONTROLLER (createManual): req.body:', req.body); // LOG 3
     const pool = req.dbPool;
     const professionalUserId = req.user.userId;
     const { patientId, dateTime, reasonForVisit } = req.body;
@@ -61,6 +65,15 @@ export const createManualAppointment = async (req, res) => {
         await pool.query(
             'INSERT INTO Appointments (id, dateTime, patientId, professionalUserId, reasonForVisit, status) VALUES (?, ?, ?, ?, ?, ?)',
             [appointmentId, formattedDateTime, patientId, professionalUserId, reasonForVisit || null, 'SCHEDULED']
+        );
+
+        const [patientData] = await pool.query('SELECT fullName FROM Patients WHERE id = ?', [patientId]);
+        const patientName = patientData.length > 0 ? patientData[0].fullName : 'Paciente';
+
+        const notificationMessage = `Turno manual añadido para ${patientName} el ${format(new Date(dateTime), "dd/MM 'a las' HH:mm")}.`;
+        await pool.query(
+            'INSERT INTO Notifications (userId, message, link) VALUES (?, ?, ?)',
+            [professionalUserId, notificationMessage, `/profesional/dashboard/agenda?appointmentId=${appointmentId}`]
         );
 
         // Devolver el turno recién creado
@@ -192,9 +205,12 @@ export const updateProfessionalNotes = async (req, res) => {
 // @route   POST /api/public/appointments
 // @access  Público
 export const createPublicAppointment = async (req, res) => {
+        console.log('APPOINTMENT_CONTROLLER (createPublic): Endpoint alcanzado.'); // LOG 1
+    console.log('APPOINTMENT_CONTROLLER (createPublic): req.body:', req.body); // LOG 2
     const pool = req.dbPool;
     const { professionalId, dateTime, patientDetails } = req.body;
-    const { dni, firstName, lastName, email, phone, birthDate } = patientDetails;
+    const { dni, firstName, lastName, email, phone, birthDate, motivo } = patientDetails;
+    const reasonForVisit = motivo;
 
     // Validación de entrada
     if (!professionalId || !dateTime || !dni || !firstName || !lastName || !email) {
@@ -249,8 +265,15 @@ export const createPublicAppointment = async (req, res) => {
         // 3. CREAR EL TURNO
         const appointmentId = `appt_${uuidv4()}`; // Usar UUID para un ID más robusto
         await connection.query(
-            'INSERT INTO Appointments (id, dateTime, patientId, professionalUserId, status) VALUES (?, ?, ?, ?, ?)',
-            [appointmentId, formattedDateTime, patientId, professionalId, 'SCHEDULED']
+            'INSERT INTO Appointments (id, dateTime, patientId, professionalUserId, reasonForVisit, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [appointmentId, formattedDateTime, patientId, professionalId, reasonForVisit || null, 'SCHEDULED']
+        );
+
+        // --- INSERTAR NOTIFICACIÓN ---
+        const notificationMessage = `Nuevo turno de ${firstName} ${lastName} para el ${format(new Date(dateTime), "dd/MM 'a las' HH:mm")}.`;
+        await connection.query(
+            'INSERT INTO Notifications (userId, message, link) VALUES (?, ?, ?)',
+            [professionalId, notificationMessage, `/profesional/dashboard/agenda?appointmentId=${appointmentId}`] // El link es opcional
         );
         
         // 4. CONFIRMAR TRANSACCIÓN

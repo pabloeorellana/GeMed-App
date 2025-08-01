@@ -7,6 +7,8 @@ import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
 import { es } from 'date-fns/locale';
 import { format } from 'date-fns';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [availableSlots, setAvailableSlots] = useState([]);
@@ -15,14 +17,13 @@ const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
 
     useEffect(() => {
         if (!selectedDate || !professionalId) return;
-
         setLoadingSlots(true);
         setError(null);
         setAvailableSlots([]);
 
         const dateKey = format(selectedDate, 'yyyy-MM-dd');
 
-        fetch(`http://localhost:3001/api/public/availability?date=${dateKey}&professionalId=${professionalId}`)
+        fetch(`${API_URL}/api/public/availability?date=${dateKey}&professionalId=${professionalId}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Error ${response.status} del servidor al obtener horarios.`);
@@ -39,7 +40,6 @@ const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
             .finally(() => {
                 setLoadingSlots(false);
             });
-
     }, [selectedDate, professionalId]);
 
     const handleDateChange = (newDate) => {
@@ -59,7 +59,7 @@ const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
     const shouldDisableDate = (date) => {
         if (!date) return false;
         const day = date.getDay();
-        return day === 0 || day === 6; // Deshabilita visualmente Domingo y Sábado
+        return day === 0 || day === 6;
     };
 
     return (
@@ -77,11 +77,7 @@ const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
                             onChange={handleDateChange}
                             shouldDisableDate={shouldDisableDate}
                             minDate={new Date()}
-                            sx={{
-                                '& .MuiCalendarPicker-root': {
-                                    width: '100%',
-                                },
-                            }}
+                            sx={{ '& .MuiCalendarPicker-root': { width: '100%' } }}
                         />
                     </Paper>
                 </Grid>

@@ -1,17 +1,23 @@
-// src/utils/authFetch.js
 const getAuthToken = () => {
     return localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
 };
 
-const authFetch = async (url, options = {}) => {
+const API_URL = import.meta.env.VITE_API_URL; // <<<--- LEER LA VARIABLE DE ENTORNO
+
+const authFetch = async (endpoint, options = {}) => {
     const token = getAuthToken();
+    const url = `${API_URL}${endpoint}`;
+    const isFormData = options.body instanceof FormData;
     const headers = {
-        'Content-Type': 'application/json', // Default, puede ser sobrescrito
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...options.headers,
     };
 
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
+    }
+    if (isFormData) {
+        delete headers['Content-Type'];
     }
 
     try {

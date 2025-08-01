@@ -13,6 +13,8 @@ import { LocalizationProvider, TimePicker, DateTimePicker } from '@mui/x-date-pi
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { es } from 'date-fns/locale';
 import { format } from 'date-fns';
+import { useNotification } from '../../../context/NotificationContext';
+
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -193,6 +195,7 @@ const AvailabilityView = () => {
     const [timeBlocks, setTimeBlocks] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const { showNotification } = useNotification();
 
     const fetchAvailabilityData = useCallback(async () => {
         setLoading(true);
@@ -239,10 +242,8 @@ const AvailabilityView = () => {
             try {
                 await authFetch(`http://localhost:3001/api/availability/regular/${scheduleId}`, { method: 'DELETE' });
                 fetchAvailabilityData();
-            } catch (error) {
-                console.error("Error eliminando horario regular:", error);
-                setError(error.message || "Error al eliminar horario.");
-            }
+                showNotification('Horario eliminado.', 'info');
+            } catch (error) {showNotification(error.message || 'Error al eliminar el horario.', 'error');}
         }
     };
 
