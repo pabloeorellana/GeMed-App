@@ -1,59 +1,54 @@
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles'; 
 import CssBaseline from '@mui/material/CssBaseline';
 import Typography from '@mui/material/Typography'; 
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import AdminDashboardLayout from './pages/AdminDashboardPage/AdminDashboardLayout.jsx';
+import { NotificationProvider } from './context/NotificationContext.jsx';
 
 import AppointmentBookingPage from './pages/AppointmentBookingPage/AppointmentBookingPage.jsx';
 import ProfessionalLoginPage from './pages/ProfessionalLoginPage/ProfessionalLoginPage.jsx';
 import ProfessionalDashboardLayout from './pages/ProfessionalDashboardPage/ProfessionalDashboardLayout.jsx';
-import { NotificationProvider } from './context/NotificationContext.jsx';
+import AdminDashboardLayout from './pages/AdminDashboardPage/AdminDashboardLayout.jsx';
 import ProfessionalSelectionPage from './pages/ProfessionalSelectionPage/ProfessionalSelectionPage.jsx';
-
 
 const theme = createTheme({
     palette: {
         primary: {
-            main: '#00979e', // Tu color principal
-            light: '#56c8cf', // Una versión más clara
-            dark: '#006970',  // Una versión más oscura
+            main: '#00979e',
+            light: '#56c8cf',
+            dark: '#006970',
             contrastText: '#ffffff',
         },
-        secondary: { // Puedes mantener el verde o cambiarlo a otro color complementario
-            main: '#f57c00', // Un naranja como ejemplo de color secundario
+        secondary: {
+            main: '#f57c00',
             contrastText: '#ffffff',
         },
-        // Puedes ajustar otros colores si es necesario
     },
 });
 
-const isAuthenticatedProfessional = () => {
-    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
-    return !!token;
-};
+// Componente para Proteger Rutas de Profesional y Admin
+const ProtectedRoute = ({ children, allowedRoles }) => {
+    const { authUser, isAuthenticated, loadingAuth } = useAuth();
 
-const ProtectedProfessionalRoute = ({ children }) => {
-    const { isAuthenticated, loadingAuth } = useAuth(); 
     if (loadingAuth) {
-        return <Typography>Cargando...</Typography>;
+        // Muestra un loader mientras se verifica la autenticación inicial
+        return <Typography sx={{ p: 3, textAlign: 'center' }}>Verificando autenticación...</Typography>;
     }
 
     if (!isAuthenticated) {
+        // Si no está autenticado, redirige a la página de login
         return <Navigate to="/profesional/login" replace />;
     }
-    return children;
-};
+    
+    // Si la ruta requiere roles específicos y el rol del usuario no está permitido
+    if (allowedRoles && !allowedRoles.includes(authUser.user.role)) {
+        // Redirige a una página de "no autorizado" o de vuelta a la agenda del profesional como fallback
+        // Esto previene que un 'PROFESSIONAL' acceda a '/admin/dashboard'
+        return <Navigate to="/profesional/dashboard/agenda" replace />; 
+    }
 
-const ProtectedAdminRoute = ({ children }) => {
-    const { authUser, isAuthenticated, loadingAuth } = useAuth();
-    if (loadingAuth) {
-        return <Typography>Cargando...</Typography>;
-    }
-    if (!isAuthenticated || authUser.user.role !== 'ADMIN') {
-        return <Navigate to="/profesional/login" replace />; // O a una página de "Acceso Denegado"
-    }
     return children;
 };
 
@@ -62,35 +57,38 @@ function App() {
         <ThemeProvider theme={theme}>
             <CssBaseline />
             <BrowserRouter>
-            <NotificationProvider>
-                <AuthProvider> {}
-                    <Routes>
-                        <Route path="/" element={<ProfessionalSelectionPage />} />
-                        <Route path="/reservar/:professionalId" element={<AppointmentBookingPage />} />
-                        <Route path="/profesional/login" element={<ProfessionalLoginPage />} />
-                        <Route path="/" element={<AppointmentBookingPage />} />
-                        <Route path="/profesional/login" element={<ProfessionalLoginPage />} />
-                        <Route
-                            path="/profesional/dashboard/*"
-                            element={
-                                <ProtectedProfessionalRoute>
-                                    <ProfessionalDashboardLayout />
-                                </ProtectedProfessionalRoute>
-                            }
-                        />
-                        <Route
-                            path="/admin/dashboard/*"
-                            element={
-                                <ProtectedAdminRoute>
-                                    <AdminDashboardLayout />
-                                </ProtectedAdminRoute>
+                <NotificationProvider>
+                    <AuthProvider>
+                        <Routes>
+                            {/* --- Rutas Públicas para Pacientes --- */}
+                            <Route path="/" element={<ProfessionalSelectionPage />} />
+                            <Route path="/reservar/:professionalId" element={<AppointmentBookingPage />} />
+                            <Route path="/profesional/login" element={<ProfessionalLoginPage />} />
+
+                            {/* --- Rutas Protegidas para Profesionales --- */}
+                            <Route
+                                path="/profesional/dashboard/*"
+                                element={
+                                    <ProtectedRoute allowedRoles={['PROFESSIONAL', 'ADMIN']}>
+                                        <ProfessionalDashboardLayout />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            {/* --- Rutas Protegidas para Administradores --- */}
+                            <Route
+                                path="/admin/dashboard/*"
+                                element={
+                                    <ProtectedRoute allowedRoles={['ADMIN']}>
+                                        <AdminDashboardLayout />
+                                    </ProtectedRoute>
                                 }
                             />
                             
-                            <Route path="*" element={<Typography>Página no encontrada (404)</Typography>} />
-                        <Route path="*" element={<Typography>Página no encontrada (404)</Typography>} />
-                    </Routes>
-                </AuthProvider>
+                            {/* --- Ruta para Página No Encontrada (404) --- */}
+                            <Route path="*" element={<Typography sx={{p:3, textAlign:'center'}}><h2>404</h2><p>Página no encontrada</p></Typography>} />
+                        </Routes>
+                    </AuthProvider>
                 </NotificationProvider>
             </BrowserRouter>
         </ThemeProvider>

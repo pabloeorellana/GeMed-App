@@ -1,13 +1,15 @@
+// src/utils/authFetch.js
 const getAuthToken = () => {
     return localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
 };
 
-const API_URL = import.meta.env.VITE_API_URL; // <<<--- LEER LA VARIABLE DE ENTORNO
-
 const authFetch = async (endpoint, options = {}) => {
+    // Mover la lógica de la URL base aquí dentro
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     const token = getAuthToken();
-    const url = `${API_URL}${endpoint}`;
+    const url = `${API_BASE_URL}${endpoint}`; // Construir la URL completa
     const isFormData = options.body instanceof FormData;
+
     const headers = {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...options.headers,
@@ -16,6 +18,8 @@ const authFetch = async (endpoint, options = {}) => {
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
+
+    // `fetch` elimina Content-Type automáticamente para FormData si está undefined
     if (isFormData) {
         delete headers['Content-Type'];
     }
@@ -32,15 +36,11 @@ const authFetch = async (endpoint, options = {}) => {
             localStorage.removeItem('userData');
             sessionStorage.removeItem('authToken');
             sessionStorage.removeItem('userData');
-            // Disparar un evento personalizado o usar el contexto para un logout global es mejor
-            // que window.location.href si estás dentro de componentes React que pueden manejar el estado.
-            // Por ahora, esto fuerza la recarga, lo que también limpiará el estado de React.
-            window.location.href = '/profesional/login'; // Ajusta si la ruta de login es diferente
+            window.location.href = '/profesional/login';
             throw new Error('No autorizado');
         }
 
         if (!response.ok) {
-            // Intenta parsear el error del backend si es JSON, sino usa el statusText
             let errorData;
             try {
                 errorData = await response.json();
@@ -50,15 +50,15 @@ const authFetch = async (endpoint, options = {}) => {
             throw new Error(errorData.message || `Error ${response.status}`);
         }
 
-        if (response.status === 204) { // No Content
+        if (response.status === 204) {
             return null;
         }
-        // Si el Content-Type es application/json, intenta parsear, sino devuelve la respuesta tal cual
+        
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.indexOf("application/json") !== -1) {
             return response.json();
         } else {
-            return response; // O response.text() si esperas texto
+            return response;
         }
 
     } catch (error) {

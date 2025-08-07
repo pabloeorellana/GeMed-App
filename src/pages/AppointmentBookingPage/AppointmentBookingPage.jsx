@@ -11,11 +11,10 @@ import AppointmentConfirmation from '../../components/AppointmentConfirmation/Ap
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 import SearchIcon from '@mui/icons-material/Search';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-//const PROFESSIONAL_ID_TO_BOOK = 'prof_uuid_01'; // Usa un ID de profesional que exista en tu DB
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const AppointmentBookingPage = () => {
-     const { professionalId } = useParams();
+    const { professionalId } = useParams(); // Obtiene el ID del profesional de la URL
     const [currentStep, setCurrentStep] = useState(1);
     const [selectedDateTime, setSelectedDateTime] = useState(null);
     const [confirmedAppointment, setConfirmedAppointment] = useState(null);
@@ -39,7 +38,7 @@ const AppointmentBookingPage = () => {
         setDniLookupPerformed(true);
 
         try {
-            const response = await fetch(`${API_URL}/api/public/patients/lookup?dni=${dniInput.trim()}`);
+            const response = await fetch(`${API_BASE_URL}/api/public/patients/lookup?dni=${dniInput.trim()}`);
             if (response.status === 404) {
                 setRecognizedPatient({ dni: dniInput.trim() });
                 throw new Error("DNI no encontrado. Por favor, complete sus datos.");
@@ -70,12 +69,12 @@ const AppointmentBookingPage = () => {
         setSubmissionError('');
         try {
             const payload = {
-                professionalId: professionalId,
+                professionalId: professionalId, // Usar el ID de la URL
                 dateTime: appointmentDateTime.toISOString(),
                 patientDetails: patientDetails
             };
 
-            const response = await fetch(`${API_URL}/api/public/appointments`, {
+            const response = await fetch(`${API_BASE_URL}/api/public/appointments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -95,7 +94,6 @@ const AppointmentBookingPage = () => {
         } catch (error) {
             console.error("Error al confirmar el turno:", error);
             setSubmissionError(error.message);
-            alert(`Error: ${error.message}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -190,7 +188,11 @@ const AppointmentBookingPage = () => {
                             <Typography variant="body1" color="text.secondary" sx={{ mb: 3, textAlign: 'center', maxWidth: '700px' }}>
                                 Haga clic sobre un horario disponible para comenzar su reserva.
                             </Typography>
-                            <AvailabilityCalendar onSlotSelect={handleSlotSelected} professionalId={professionalId} />
+                            {professionalId ? (
+                                <AvailabilityCalendar onSlotSelect={handleSlotSelected} professionalId={professionalId} />
+                            ) : (
+                                <Alert severity="error">No se ha especificado un profesional. La URL debe ser /book/:professionalId</Alert>
+                            )}
                         </>
                     )}
                     {currentStep === 2 && (
