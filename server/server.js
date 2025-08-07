@@ -1,3 +1,4 @@
+// server.js
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -29,7 +30,7 @@ if (!JWT_SECRET) {
     process.exit(1);
 }
 
-const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173'; 
 
 const corsOptions = {
   origin: [frontendURL, 'http://localhost:5173'],
@@ -38,12 +39,10 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200
 };
-
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- LÓGICA DE CONEXIÓN A DB PARA LOCAL Y PRODUCCIÓN (RAILWAY) ---
 const connectionOptions = process.env.DATABASE_URL
     ? { uri: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
     : {
@@ -60,7 +59,7 @@ const connectionOptions = process.env.DATABASE_URL
 let pool;
 try {
     pool = mysql.createPool(connectionOptions);
-    console.log(`Conectado exitosamente a la base de datos MySQL.`);
+    console.log(`Conectado exitosamente a la base de datos.`);
 } catch (error) {
     console.error('Error al crear el pool de conexiones a la base de datos:', error);
     process.exit(1);
@@ -73,12 +72,16 @@ app.use((req, res, next) => {
 
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
 
-// --- Definición de Rutas ---
-
-// Rutas Públicas
 app.use('/api/public', publicRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/availability', availabilityRoutes);
+app.use('/api/patients', patientRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/clinical-records', clinicalRecordRoutes);
+app.use('/api/statistics', statisticsRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
-// Ruta de Autenticación
 app.post('/api/auth/login', async (req, res) => {
     const { dni, password } = req.body;
     const currentPool = req.dbPool;
@@ -127,16 +130,6 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// Rutas Protegidas (una sola vez por router)
-app.use('/api/users', userRoutes);
-app.use('/api/availability', availabilityRoutes);
-app.use('/api/patients', patientRoutes);
-app.use('/api/appointments', appointmentRoutes);
-app.use('/api/clinical-records', clinicalRecordRoutes);
-app.use('/api/statistics', statisticsRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/admin', adminRoutes);
-
 app.get('/api/professional/data', protect, authorize('PROFESSIONAL'), (req, res) => {
     res.json({ message: `Bienvenido Profesional ${req.user.fullName}! Tus datos específicos están aquí.`});
 });
@@ -145,7 +138,6 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
 });
 
-// Manejador de Errores Global
 app.use((err, req, res, next) => {
     console.error('--- ERROR GLOBAL CAPTURADO ---');
     console.error('Mensaje:', err.message);
