@@ -2,24 +2,34 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
-import path from 'path'; 
+import path from 'path';
 
-const envPath = path.resolve(process.cwd(), '.env');
-dotenv.config({ path: envPath }); 
+// --- Lógica para seleccionar el archivo .env ---
+// Lee el argumento pasado al script (ej. 'production')
+const envArg = process.argv[2];
+const envFileName = envArg === 'production' ? '.env.production' : '.env';
+const envPath = path.resolve(process.cwd(), envFileName);
+
+console.log(`Cargando variables de entorno desde: ${envFileName}`);
+dotenv.config({ path: envPath });
+// --- Fin Lógica .env ---
+
 
 const dbConfig = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT || 3306, // Añadir puerto
 };
 
-// CONSOLE LOGS PARA VERIFICAR
-console.log(`Intentando cargar .env desde: ${envPath}`);
+// --- Logs para verificar las variables cargadas ---
 console.log('DB_HOST:', process.env.DB_HOST);
 console.log('DB_USER:', process.env.DB_USER);
-console.log('DB_PASSWORD is set:', !!process.env.DB_PASSWORD); 
+console.log('DB_PASSWORD is set:', !!process.env.DB_PASSWORD);
 console.log('DB_NAME:', process.env.DB_NAME);
+console.log('DB_PORT:', process.env.DB_PORT);
+// --- Fin Logs ---
 
 
 const createUser = async (dni, email, password, fullName, role, specialty = null) => {
@@ -58,12 +68,9 @@ const createUser = async (dni, email, password, fullName, role, specialty = null
         console.log(`Usuario ${fullName} (ID: ${userId}) creado con rol ${role}.`);
 
         if (role === 'PROFESSIONAL') {
-            if (!specialty) {
-                specialty = 'General';
-            }
             await connection.execute(
                 'INSERT INTO Professionals (userId, specialty) VALUES (?, ?)',
-                [userId, specialty]
+                [userId, specialty || 'General']
             );
             console.log(`Datos profesionales para ${fullName} creados con especialidad: ${specialty}.`);
         }
@@ -74,30 +81,29 @@ const createUser = async (dni, email, password, fullName, role, specialty = null
     } catch (error) {
         if (connection) await connection.rollback();
         console.error('Error creando usuario:', error);
-        } finally {
+    } finally {
         if (connection) await connection.end();
         console.log("Conexión a DB cerrada.");
     }
 };
 
-const passwordToHash = 'admin'; // La contraseña que quieres hashear
-const saltRounds = 10;
+// --- CONFIGURA AQUÍ LOS DATOS DEL USUARIO A CREAR ---
+const userToCreate = {
+    dni: '00000000A',
+    email: 'admin@nutrismart.com',
+    password: 'AdminPassword123!', // Elige una contraseña segura
+    fullName: 'Administrador del Sistema',
+    role: 'ADMIN',
+    specialty: null // Poner una especialidad solo si el rol es 'PROFESSIONAL'
+};
 
-bcrypt.hash(passwordToHash, saltRounds, (err, hash) => {
-    if (err) {
-        console.error('Error al generar el hash:', err);
-        return;
-    }
-    console.log(`\n--- Hash para la contraseña "${passwordToHash}" ---`);
-    console.log(hash); // ¡Copia esta línea!
-    console.log("------------------------------------------\n");
-});
-
-//createUser(
-//'11223344P',
-//'profesional1@nutrismart.com',
-//'ProfPass123!',
-//'Dr. Ejemplo Uno',
-//'PROFESSIONAL',
-//'Nutrición Deportiva'
-//).catch(err => console.error("Fallo la ejecución de createUser para Profesional:", err));
+// --- LLAMADA A LA FUNCIÓN PARA CREAR EL USUARIO ---
+console.log(`\nIniciando creación de usuario con rol: ${userToCreate.role}`);
+createUser(
+    userToCreate.dni,
+    userToCreate.email,
+    userToCreate.password,
+    userToCreate.fullName,
+    userToCreate.role,
+    userToCreate.specialty
+);
