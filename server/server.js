@@ -195,7 +195,7 @@ console.log("------------------------------------");
 // --- FIN DEL LOG ---
 
 
-// --- Manejador de Errores Global ---
+// --- Manejador de Errores Global --
 app.use((err, req, res, next) => {
     console.error('--- ERROR GLOBAL CAPTURADO ---');
     console.error('Mensaje:', err.message);
