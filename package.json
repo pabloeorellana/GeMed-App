@@ -11,7 +11,8 @@
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "create:user": "node -r dotenv/config server/scripts/createUser.js"
+    "create:user": "node -r dotenv/config server/scripts/createUser.js",
+    "create:user:prod": "cross-env DOTENV_CONFIG_PATH=.env.production node -r dotenv/config server/scripts/createUser.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -53,6 +54,7 @@
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
     "concurrently": "^9.1.2",
+    "cross-env": "^10.0.0",
     "eslint": "^9.25.0",
     "eslint-plugin-react": "^7.34.1",
     "eslint-plugin-react-hooks": "^5.2.0",
