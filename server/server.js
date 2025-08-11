@@ -168,22 +168,44 @@ app.listen(PORT, () => {
     console.log(`Servidor backend NutriSmart corriendo en http://localhost:${PORT}`);
 });
 
-// Ruta de Health Check (al final de las rutas, antes del manejador de errores)
+// ... (todo tu server.js hasta antes del manejador de errores)
+
+// Ruta de Health Check
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
 });
 
-// Añadir este console.log para verificar el registro de rutas
-console.log("Rutas registradas:");
+// --- LOG PARA VERIFICAR RUTAS REGISTRADAS ---
+console.log("--- RUTAS REGISTRADAS EN EXPRESS ---");
+const registeredRoutes = [];
 app._router.stack.forEach(function(r){
   if (r.route && r.route.path){
-    console.log(`- ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
+    registeredRoutes.push(`${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
+  } else if (r.name === 'router') { // Para routers anidados como app.use('/api/users', userRoutes)
+    r.handle.stack.forEach(function(nested) {
+        if (nested.route && nested.route.path) {
+            const prefix = r.regexp.source.replace('^\\', '').replace('\\/?(?=\\/|$)',''); // Obtener prefijo
+            registeredRoutes.push(`${Object.keys(nested.route.methods).join(', ').toUpperCase()} ${prefix}${nested.route.path}`);
+        }
+    });
   }
 });
+registeredRoutes.sort().forEach(route => console.log(route));
+console.log("------------------------------------");
+// --- FIN DEL LOG ---
+
 
 // --- Manejador de Errores Global ---
 app.use((err, req, res, next) => {
-    // ...
+    console.error('--- ERROR GLOBAL CAPTURADO ---');
+    console.error('Mensaje:', err.message);
+    console.error('Stack:', err.stack);
+    console.error('-----------------------------');
+    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+    res.status(statusCode).json({
+        message: err.message,
+        stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    });
 });
 
 app.listen(PORT, () => {
