@@ -167,3 +167,25 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
     console.log(`Servidor backend NutriSmart corriendo en http://localhost:${PORT}`);
 });
+
+// Ruta de Health Check (al final de las rutas, antes del manejador de errores)
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
+});
+
+// Añadir este console.log para verificar el registro de rutas
+console.log("Rutas registradas:");
+app._router.stack.forEach(function(r){
+  if (r.route && r.route.path){
+    console.log(`- ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
+  }
+});
+
+// --- Manejador de Errores Global ---
+app.use((err, req, res, next) => {
+    // ...
+});
+
+app.listen(PORT, () => {
+    console.log(`Servidor backend NutriSmart corriendo en el puerto: ${PORT}`);
+});
