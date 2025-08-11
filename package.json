@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  
+  
   "scripts": {
     "start": "node -r dotenv/config server/server.js",
     "dev:frontend": "vite",
