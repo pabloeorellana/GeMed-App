@@ -1,13 +1,18 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, loadEnv } from 'vite' // <<<--- AÑADIR loadEnv
+import react from '@vitejs/plugin/react'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Log para ver las variables de entorno durante el build en Vercel
-  console.log(`--- VITE BUILD MODE: ${mode} ---`);
-  console.log('VITE_API_URL:', process.env.VITE_API_URL);
-
+  // Cargar variables de entorno del archivo .env (para desarrollo local)
+  // Vercel inyectará las suyas automáticamente
+  const env = loadEnv(mode, process.cwd(), '');
+  
   return {
     plugins: [react()],
+    define: {
+      // Exponer la variable de entorno a tu código del frontend
+      // VITE_API_URL es la variable en Vercel y tu .env local
+      'process.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL)
+    }
   }
 })

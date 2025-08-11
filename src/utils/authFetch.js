@@ -5,7 +5,7 @@ const getAuthToken = () => {
 
 const authFetch = async (endpoint, options = {}) => {
     // Mover la lógica de la URL base aquí dentro
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001';
     const token = getAuthToken();
     const url = `${API_BASE_URL}${endpoint}`; // Construir la URL completa
     const isFormData = options.body instanceof FormData;

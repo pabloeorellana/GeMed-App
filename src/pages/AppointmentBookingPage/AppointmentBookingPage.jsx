@@ -11,7 +11,7 @@ import AppointmentConfirmation from '../../components/AppointmentConfirmation/Ap
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 import SearchIcon from '@mui/icons-material/Search';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001';
 
 const AppointmentBookingPage = () => {
     const { professionalId } = useParams(); // Obtiene el ID del profesional de la URL
