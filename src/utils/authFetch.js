@@ -1,13 +1,13 @@
 // src/utils/authFetch.js
+import { API_BASE_URL } from '../config';
+
 const getAuthToken = () => {
     return localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
 };
 
 const authFetch = async (endpoint, options = {}) => {
-    // Mover la lógica de la URL base aquí dentro
-    const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001';
     const token = getAuthToken();
-    const url = `${API_BASE_URL}${endpoint}`; // Construir la URL completa
+    const url = `${API_BASE_URL}${endpoint}`;
     const isFormData = options.body instanceof FormData;
 
     const headers = {
@@ -19,7 +19,6 @@ const authFetch = async (endpoint, options = {}) => {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // `fetch` elimina Content-Type automáticamente para FormData si está undefined
     if (isFormData) {
         delete headers['Content-Type'];
     }

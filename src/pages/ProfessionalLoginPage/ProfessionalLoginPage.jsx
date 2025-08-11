@@ -1,3 +1,4 @@
+// src/pages/ProfessionalLoginPage/ProfessionalLoginPage.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom'; 
 import { useAuth } from '../../context/AuthContext';
@@ -5,6 +6,7 @@ import {
     Container, Box, Typography, TextField, Button, Checkbox,
     FormControlLabel, Paper, Alert
 } from '@mui/material';
+import { API_BASE_URL } from '../../config';
 
 const logoUrl = "https://i1.sndcdn.com/avatars-cLEbOjWz2zZMiHzD-wIsmGQ-t240x240.jpg";
 
@@ -35,7 +37,7 @@ const ProfessionalLoginPage = () => {
         setLoading(true);
 
         try {
-            const response = await fetch('http://localhost:3001/api/auth/login', {
+            const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ dni: credentials.dni, password: credentials.password }),

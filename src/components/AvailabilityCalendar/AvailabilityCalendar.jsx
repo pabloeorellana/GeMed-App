@@ -6,8 +6,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
 import { es } from 'date-fns/locale';
 import { format } from 'date-fns';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from '../../config';
 
 const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -23,7 +22,7 @@ const AvailabilityCalendar = ({ onSlotSelect, professionalId }) => {
 
         const dateKey = format(selectedDate, 'yyyy-MM-dd');
 
-        fetch(`${API_URL}/api/public/availability?date=${dateKey}&professionalId=${professionalId}`)
+        fetch(`${API_BASE_URL}/api/public/availability?date=${dateKey}&professionalId=${professionalId}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Error ${response.status} del servidor al obtener horarios.`);

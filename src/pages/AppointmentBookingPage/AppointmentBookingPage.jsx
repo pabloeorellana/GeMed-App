@@ -5,16 +5,15 @@ import {
     Button, CircularProgress, Paper, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
+import { API_BASE_URL } from '../../config';
 import AvailabilityCalendar from '../../components/AvailabilityCalendar/AvailabilityCalendar.jsx';
 import PatientForm from '../../components/PatientForm/PatientForm.jsx';
 import AppointmentConfirmation from '../../components/AppointmentConfirmation/AppointmentConfirmation.jsx';
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 import SearchIcon from '@mui/icons-material/Search';
 
-const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001';
-
 const AppointmentBookingPage = () => {
-    const { professionalId } = useParams(); // Obtiene el ID del profesional de la URL
+    const { professionalId } = useParams();
     const [currentStep, setCurrentStep] = useState(1);
     const [selectedDateTime, setSelectedDateTime] = useState(null);
     const [confirmedAppointment, setConfirmedAppointment] = useState(null);
@@ -69,7 +68,7 @@ const AppointmentBookingPage = () => {
         setSubmissionError('');
         try {
             const payload = {
-                professionalId: professionalId, // Usar el ID de la URL
+                professionalId: professionalId,
                 dateTime: appointmentDateTime.toISOString(),
                 patientDetails: patientDetails
             };
@@ -191,7 +190,7 @@ const AppointmentBookingPage = () => {
                             {professionalId ? (
                                 <AvailabilityCalendar onSlotSelect={handleSlotSelected} professionalId={professionalId} />
                             ) : (
-                                <Alert severity="error">No se ha especificado un profesional. La URL debe ser /book/:professionalId</Alert>
+                                <Alert severity="error">No se ha especificado un profesional. La URL debe ser /reservar/:professionalId</Alert>
                             )}
                         </>
                     )}
