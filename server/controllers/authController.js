@@ -1,84 +1,53 @@
-import jwt from 'jsonwebtoken';
+// server/controllers/authController.js
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
-// Función para generar un token JWT
-const generateToken = (id) => {
-    // Es crucial que JWT_SECRET esté definido en tus variables de entorno (.env)
-    // y sea accesible en el entorno de Railway.
-    if (!process.env.JWT_SECRET) {
-        // En un escenario real, podrías querer lanzar un error más específico
-        // o manejarlo de otra forma si la aplicación no puede funcionar sin él.
-        console.error("FATAL ERROR: JWT_SECRET no está definida en .env para generar el token.");
-        // Podrías lanzar un error que sea capturado por el manejador de errores global
-        throw new Error("Server configuration error: JWT_SECRET not defined.");
+const JWT_SECRET = process.env.JWT_SECRET;
+
+export const loginUser = async (req, res) => {
+    const { dni, password } = req.body;
+    const currentPool = req.dbPool;
+
+    if (!dni || !password) {
+        return res.status(400).json({ message: 'DNI y contraseña son requeridos.' });
     }
-    return jwt.sign({ id }, process.env.JWT_SECRET, {
-        expiresIn: '1d', // El token expira en 1 día. Puedes ajustarlo según tus necesidades.
-    });
-};
-
-/**
- * @desc Autenticar usuario y obtener token
- * @route POST /api/auth/login
- * @access Public
- */
-export const loginUser = async (req, res, next) => {
-    const { email, password } = req.body;
-
-    // Acceder al pool de conexiones de la base de datos que se adjuntó en el middleware de server.js
-    const pool = req.dbPool;
 
     try {
-        // 1. Validar que se recibieron email y password
-        if (!email || !password) {
-            return res.status(400).json({ message: 'Por favor, ingrese email y contraseña.' });
-        }
-
-        // 2. Buscar el usuario en la base de datos por email
-        // Usamos pool.execute para consultas preparadas, más seguras contra inyección SQL.
-        const [rows] = await pool.execute(
-            'SELECT user_id, email, password, role, full_name FROM users WHERE email = ?',
-            [email]
-        );
-
-        const user = rows[0]; // El primer elemento del array `rows` es el usuario, si se encuentra.
-
-        // 3. Verificar si el usuario existe
-        if (!user) {
+        const [users] = await currentPool.query('SELECT * FROM Users WHERE dni = ? AND isActive = TRUE', [dni]);
+        
+        if (users.length === 0) {
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
-        // 4. Comparar la contraseña ingresada con la contraseña hasheada almacenada
-        // bcrypt.compare devuelve una promesa.
-        const isMatch = await bcrypt.compare(password, user.password);
+        const user = users[0];
+        const isMatch = await bcrypt.compare(password, user.passwordHash);
 
         if (!isMatch) {
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
-
-        // 5. Si las credenciales son correctas, generar un token JWT
-        const token = generateToken(user.user_id);
-
-        // 6. Enviar respuesta exitosa con los datos del usuario y el token
-        res.status(200).json({
-            user_id: user.user_id,
-            email: user.email,
-            fullName: user.full_name,
+        
+        const payload = {
+            userId: user.id,
+            dni: user.dni,
             role: user.role,
-            token, // Se envía el token al cliente
-            message: 'Inicio de sesión exitoso.'
+            fullName: user.fullName
+        };
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
+        await currentPool.query('UPDATE Users SET lastLogin = NOW() WHERE id = ?', [user.id]);
+        
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                dni: user.dni,
+                fullName: user.fullName,
+                email: user.email,
+                role: user.role
+            }
         });
 
     } catch (error) {
-        console.error('Error en loginUser:', error);
-        // Pasar el error al manejador de errores global de Express.
-        // Esto es importante para que los errores sean manejados de forma consistente
-        // y no se queden colgando las peticiones.
-        next(error);
+        console.error('BACKEND LOGIN: Error en login:', error);
+        res.status(500).json({ message: 'Error interno del servidor durante el login.' });
     }
 };
-
-// Puedes añadir otras funciones de autenticación aquí según sea necesario,
-// por ejemplo, para registrar nuevos usuarios, manejar recuperación de contraseña, etc.
-// export const registerUser = async (req, res, next) => { /* ... */ };
-// export const forgotPassword = async (req, res, next) => { /* ... */ };
