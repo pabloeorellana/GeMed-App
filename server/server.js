@@ -34,14 +34,22 @@ if (!JWT_SECRET) {
 
 const corsOptions = {
   origin: function (origin, callback) {
+    // --- LOGS DE DEPURACIÓN PARA CORS ---
     const allowedOrigins = [
         'http://localhost:5173',
         process.env.FRONTEND_URL
-    ].filter(Boolean);
+    ].filter(Boolean); // .filter(Boolean) elimina valores undefined o null de la lista
+    
+    console.log("CORS CHECK: Origen de la solicitud:", origin);
+    console.log("CORS CHECK: Orígenes permitidos:", allowedOrigins);
+    console.log("CORS CHECK: FRONTEND_URL de process.env:", process.env.FRONTEND_URL);
+    // --- FIN LOGS DE DEPURACIÓN ---
 
     if (!origin || allowedOrigins.includes(origin)) {
+      console.log("CORS CHECK: Origen permitido.");
       callback(null, true);
     } else {
+      console.log("CORS CHECK: Origen RECHAZADO.");
       callback(new Error('No permitido por CORS'));
     }
   },
