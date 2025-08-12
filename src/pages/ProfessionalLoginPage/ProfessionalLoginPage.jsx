@@ -80,8 +80,6 @@ const ProfessionalLoginPage = () => {
         }
     };
 
-
-
     return (
         <Container
             component="main"
