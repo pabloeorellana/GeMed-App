@@ -7,7 +7,6 @@ import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-// Importación de Middlewares y Routers
 import { protect, authorize } from './middleware/authMiddleware.js';
 import userRoutes from './routes/userRoutes.js';
 import availabilityRoutes from './routes/availabilityRoutes.js';
@@ -31,22 +30,29 @@ if (!JWT_SECRET) {
     process.exit(1);
 }
 
-const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173'; 
-
 const corsOptions = {
-  origin: [frontendURL, 'http://localhost:5173'],
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+        'http://localhost:5173',
+        process.env.FRONTEND_URL
+    ].filter(Boolean); // Filtrar undefined/null si FRONTEND_URL no está seteada
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   optionsSuccessStatus: 200
 };
 
-// --- Middlewares Globales ---
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- Configuración y Pool de Base de Datos ---
 const connectionOptions = process.env.DATABASE_URL
     ? { uri: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
     : {
@@ -69,21 +75,17 @@ try {
     process.exit(1);
 }
 
-// Middleware para añadir el pool de DB a cada request
 app.use((req, res, next) => {
     req.dbPool = pool;
     next();
 });
 
-// Middleware para servir archivos estáticos (subidas)
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
 
 // --- Definición de Rutas ---
 
-// 1. Rutas Públicas (no requieren autenticación)
 app.use('/api/public', publicRoutes);
 
-// 2. Ruta de Autenticación (también pública)
 app.post('/api/auth/login', async (req, res) => {
     const { dni, password } = req.body;
     const currentPool = req.dbPool;
@@ -132,7 +134,6 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// 3. Rutas Protegidas
 app.use('/api/users', userRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/patients', patientRoutes);
@@ -146,36 +147,10 @@ app.get('/api/professional/data', protect, authorize('PROFESSIONAL'), (req, res)
     res.json({ message: `Bienvenido Profesional ${req.user.fullName}! Tus datos específicos están aquí.`});
 });
 
-// 4. Ruta de Health Check (al final de las rutas, antes del manejador de errores)
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
 });
 
-// --- Manejador de Errores Global ---
-app.use((err, req, res, next) => {
-    console.error('--- ERROR GLOBAL CAPTURADO ---');
-    console.error('Mensaje:', err.message);
-    console.error('Stack:', err.stack);
-    console.error('-----------------------------');
-    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-    res.status(statusCode).json({
-        message: err.message,
-        stack: process.env.NODE_ENV === 'production' ? null : err.stack,
-    });
-});
-
-app.listen(PORT, () => {
-    console.log(`Servidor backend NutriSmart corriendo en http://localhost:${PORT}`);
-});
-
-// ... (todo tu server.js hasta antes del manejador de errores)
-
-// Ruta de Health Check
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
-});
-
-// --- Manejador de Errores Global --
 app.use((err, req, res, next) => {
     console.error('--- ERROR GLOBAL CAPTURADO ---');
     console.error('Mensaje:', err.message);
