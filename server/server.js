@@ -1,4 +1,6 @@
-// server.js
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 if (!JWT_SECRET) {
-    console.error("FATAL ERROR: JWT_SECRET no está definida en .env");
+    console.error("FATAL ERROR: JWT_SECRET no está definida en .env (verificado en server.js)");
     process.exit(1);
 }
 
@@ -35,7 +37,7 @@ const corsOptions = {
     const allowedOrigins = [
         'http://localhost:5173',
         process.env.FRONTEND_URL
-    ].filter(Boolean); // Filtrar undefined/null si FRONTEND_URL no está seteada
+    ].filter(Boolean);
 
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -81,8 +83,6 @@ app.use((req, res, next) => {
 });
 
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
-
-// --- Definición de Rutas ---
 
 app.use('/api/public', publicRoutes);
 

@@ -1,25 +1,19 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-    console.error("FATAL ERROR (authMiddleware): JWT_SECRET no está definida.");
-    process.exit(1);
-}
-
 export const protect = async (req, res, next) => {
-        console.log(`AUTH_MIDDLEWARE (protect): Verificando ruta ${req.originalUrl}`); // LOG
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) {
+        console.error("Error crítico: JWT_SECRET no está disponible en el middleware 'protect'.");
+        return res.status(500).json({ message: "Error de configuración del servidor." });
+    }
+    
     let token;
-
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
             token = req.headers.authorization.split(' ')[1];
-
-            // Verificacion del token
             const decoded = jwt.verify(token, JWT_SECRET);
             req.user = decoded;
-            console.log(`AUTH_MIDDLEWARE (protect): Token verificado para userId: ${req.user.userId}`); // LOG
-            next(); 
+            next();
         } catch (error) {
             console.error('Error de autenticación de token:', error.message);
             if (error.name === 'TokenExpiredError') {
@@ -34,7 +28,6 @@ export const protect = async (req, res, next) => {
     }
 };
 
-// Middleware de Autorización
 export const authorize = (...roles) => { 
     return (req, res, next) => {
         if (!req.user || !req.user.role) {
