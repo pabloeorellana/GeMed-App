@@ -1,3 +1,4 @@
+// server/server.js
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -18,6 +19,7 @@ import statisticsRoutes from './routes/statisticsRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import catalogRoutes from './routes/catalogRoutes.js'; // <-- NUEVA RUTA
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,7 +29,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 if (!JWT_SECRET) {
-    console.error("FATAL ERROR: JWT_SECRET no está definida en .env (verificado en server.js)");
+    console.error("FATAL ERROR: JWT_SECRET no está definida en .env");
     process.exit(1);
 }
 
@@ -84,12 +86,8 @@ app.use((req, res, next) => {
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
 
 // --- Definición de Rutas ---
-
-// 1. Rutas Públicas y de Autenticación
 app.use('/api/public', publicRoutes);
 app.use('/api/auth', authRoutes);
-
-// 2. Rutas Protegidas
 app.use('/api/users', userRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/patients', patientRoutes);
@@ -98,12 +96,8 @@ app.use('/api/clinical-records', clinicalRecordRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/catalogs', catalogRoutes); // <-- AÑADIR NUEVA RUTA
 
-app.get('/api/professional/data', protect, authorize('PROFESSIONAL'), (req, res) => {
-    res.json({ message: `Bienvenido Profesional ${req.user.fullName}! Tus datos específicos están aquí.`});
-});
-
-// 3. Ruta de Health Check
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'Servidor NutriSmart está funcionando!' });
 });

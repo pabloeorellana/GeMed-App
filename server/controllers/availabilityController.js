@@ -103,14 +103,17 @@ export const addTimeBlock = async (req, res) => {
 
     let finalStartDateTimeForDB, finalEndDateTimeForDB;
     if (isAllDay) {
-        parsedStart.setHours(0, 0, 0, 0);
-        finalStartDateTimeForDB = parsedStart.toISOString().slice(0, 19).replace('T', ' ');
-        const endOfDay = new Date(parsedStart);
-        endOfDay.setHours(23, 59, 59, 999);
-        finalEndDateTimeForDB = endOfDay.toISOString().slice(0, 19).replace('T', ' ');
+        // Para bloques de día completo, almacenar como YYYY-MM-DD 00:00:00 y YYYY-MM-DD 23:59:59
+        // Esto será interpretado en la zona horaria local de MySQL (que debería ser UTC por la configuración del pool).
+        const dateOnly = format(parsedStart, 'yyyy-MM-dd');
+        finalStartDateTimeForDB = `${dateOnly} 00:00:00`;
+        finalEndDateTimeForDB = `${dateOnly} 23:59:59`;
     } else {
-        finalStartDateTimeForDB = parsedStart.toISOString().slice(0, 19).replace('T', ' ');
-        finalEndDateTimeForDB = parsedEnd.toISOString().slice(0, 19).replace('T', ' ');
+        // Para horas específicas, formatear a 'YYYY-MM-DD HH:MM:SS'.
+        // Se asume que `parsedStart` y `parsedEnd` ya están en la zona horaria local
+        // del servidor, al ser parseados de strings ISO sin Z desde el frontend.
+        finalStartDateTimeForDB = format(parsedStart, 'yyyy-MM-dd HH:mm:ss');
+        finalEndDateTimeForDB = format(parsedEnd, 'yyyy-MM-dd HH:mm:ss');
     }
 
     try {
@@ -156,60 +159,146 @@ export const removeTimeBlock = async (req, res) => {
 
 export const getAvailability = async (req, res) => {
     const pool = req.dbPool;
-    const { date, professionalId } = req.query;
+    const { date, professionalId } = req.query; // date en formato YYYY-MM-DD
+
+    console.log(`[getAvailability] Petición recibida para profesionalId: ${professionalId}, fecha: ${date}`);
 
     if (!date || !professionalId) {
         return res.status(400).json({ message: "Se requiere fecha y ID del profesional." });
     }
 
     try {
-        const requestedDate = parseISO(date);
-        const dayOfWeek = requestedDate.getDay();
+        // 1. Determinar el día de la semana (Lunes, Martes, etc.) para la fecha solicitada.
+        // Es importante que esto refleje el día local para los horarios regulares.
+        // Creamos un objeto Date en la zona horaria local del servidor para `date`
+        // y tomamos su día de la semana. Usamos '12:00:00' para evitar problemas de
+        // cambio de horario de verano/invierno (DST) que podrían mover el día.
+        const requestedDateMiddayLocal = new Date(`${date}T12:00:00`);
+        const dayOfWeek = requestedDateMiddayLocal.getDay(); // 0 (Domingo) - 6 (Sábado)
 
+        console.log(`[getAvailability] Fecha solicitada parseada (local): ${requestedDateMiddayLocal.toLocaleString()}`);
+        console.log(`[getAvailability] Día de la semana (0=Dom, 1=Lun): ${dayOfWeek}`);
+
+        // 2. Obtener los horarios regulares del profesional para ese día
         const [schedules] = await pool.query(
             'SELECT startTime, endTime, slotDurationMinutes FROM ProfessionalAvailability WHERE professionalUserId = ? AND dayOfWeek = ?',
             [professionalId, dayOfWeek]
         );
 
+        console.log(`[getAvailability] Horarios regulares encontrados:`, schedules);
+
         if (schedules.length === 0) {
-            return res.json([]);
+            console.log(`[getAvailability] No hay horarios regulares definidos para el día ${dayOfWeek}.`);
+            return res.json([]); // No hay horarios regulares definidos para este día
         }
 
+        // Se asume que `schedules[0].slotDurationMinutes` es representativo si hay múltiples horarios.
+        const assumedSlotDuration = schedules[0].slotDurationMinutes;
+
+        // 3. Obtener los turnos ya agendados y bloques de tiempo del profesional para la fecha solicitada.
+        // Los DATETIME de MySQL se obtienen como strings 'YYYY-MM-DD HH:MM:SS'.
+        // Al crear un objeto Date con `new Date(string)`, JavaScript lo interpretará
+        // en la zona horaria local del servidor. Esta es la clave para la consistencia:
+        // todas las fechas y horas se manejarán como objetos Date en la zona horaria local del servidor.
         const [appointments] = await pool.query(
             'SELECT dateTime FROM Appointments WHERE professionalUserId = ? AND DATE(dateTime) = ? AND status NOT LIKE ?',
             [professionalId, date, 'CANCELED%']
         );
         const [blocks] = await pool.query(
-            'SELECT startDateTime, endDateTime FROM ProfessionalTimeBlocks WHERE professionalUserId = ? AND DATE(startDateTime) <= ? AND DATE(endDateTime) >= ?',
-            [professionalId, date, date]
+            'SELECT startDateTime, endDateTime FROM ProfessionalTimeBlocks WHERE professionalUserId = ? AND startDateTime <= ? AND endDateTime >= ?',
+            [professionalId, `${date} 23:59:59`, `${date} 00:00:00`]
         );
 
-        const bookedSlots = new Set(appointments.map(a => format(new Date(a.dateTime), 'HH:mm')));
+        console.log(`[getAvailability] Turnos existentes para ${date}:`, appointments);
+        console.log(`[getAvailability] Bloqueos existentes para ${date}:`, blocks);
+
+        const bookedPeriods = appointments.map(a => {
+            const start = new Date(a.dateTime); // Interpreta dateTime de MySQL en zona horaria local del servidor
+            const end = addMinutes(start, assumedSlotDuration);
+            console.log(`[getAvailability] Turno reservado: ${start.toLocaleString()} - ${end.toLocaleString()}`);
+            return { start, end };
+        });
+
+        const blockedPeriods = blocks.map(b => {
+            const start = new Date(b.startDateTime); // Interpreta startDateTime de MySQL en zona horaria local del servidor
+            const end = new Date(b.endDateTime);     // Interpreta endDateTime de MySQL en zona horaria local del servidor
+            console.log(`[getAvailability] Bloqueo: ${start.toLocaleString()} - ${end.toLocaleString()}`);
+            return { start, end };
+        });
+
         const availableSlots = [];
+        const now = new Date(); // Hora actual en la zona horaria LOCAL del servidor
+        console.log(`[getAvailability] Hora actual del servidor (LOCAL): ${now.toLocaleString()}`);
 
+        // Iterar sobre cada horario regular encontrado para el día
         for (const schedule of schedules) {
-            let currentTime = parseISO(`${date}T${schedule.startTime}`);
-            const endTime = parseISO(`${date}T${schedule.endTime}`);
-            
-            while (isBefore(currentTime, endTime)) {
-                const slotTime = format(currentTime, 'HH:mm');
+            // Construir la fecha y hora de inicio del primer slot
+            const [startHour, startMinute] = schedule.startTime.split(':').map(Number);
+            let currentSlotStart = new Date(requestedDateMiddayLocal.getFullYear(), requestedDateMiddayLocal.getMonth(), requestedDateMiddayLocal.getDate(), startHour, startMinute, 0, 0);
 
-                let isBlocked = false;
-                for (const block of blocks) {
-                    if (currentTime >= new Date(block.startDateTime) && currentTime < new Date(block.endDateTime)) {
-                        isBlocked = true;
+            // Construir la fecha y hora de fin del horario regular
+            const [endHour, endMinute] = schedule.endTime.split(':').map(Number);
+            const scheduleEnd = new Date(requestedDateMiddayLocal.getFullYear(), requestedDateMiddayLocal.getMonth(), requestedDateMiddayLocal.getDate(), endHour, endMinute, 0, 0);
+
+            console.log(`[getAvailability] Procesando horario: ${schedule.startTime}-${schedule.endTime}, duracion: ${schedule.slotDurationMinutes}min`);
+            console.log(`[getAvailability] Inicio de generación de slots: ${currentSlotStart.toLocaleString()}`);
+            console.log(`[getAvailability] Fin del horario: ${scheduleEnd.toLocaleString()}`);
+
+
+            // Generar slots de tiempo de la duración definida por el profesional
+            while (isBefore(currentSlotStart, scheduleEnd)) {
+                const currentSlotEnd = addMinutes(currentSlotStart, schedule.slotDurationMinutes);
+
+                console.log(`[getAvailability] Evaluando slot: ${currentSlotStart.toLocaleString()} - ${currentSlotEnd.toLocaleString()}`);
+
+                // 1. Filtrar slots que ya pasaron (comparando con la hora actual del servidor).
+                // Se compara el *final* del slot para asegurar que si un slot ya empezó, pero no ha terminado, se muestre,
+                // o si un slot ya terminó, no se muestre.
+                if (isBefore(currentSlotEnd, now)) {
+                    console.log(`[getAvailability] Slot (${currentSlotStart.toLocaleTimeString()}) está en el pasado. Saltando.`);
+                    currentSlotStart = currentSlotEnd; // Mover al siguiente slot
+                    continue; // Saltar este slot (ya pasó)
+                }
+
+                let isOverlapping = false;
+
+                // 2. Verificar solapamiento con turnos ya agendados
+                for (const booked of bookedPeriods) {
+                    // Un solapamiento ocurre si: (Inicio del slot actual < Fin del turno reservado) Y (Fin del slot actual > Inicio del turno reservado)
+                    if (currentSlotStart < booked.end && currentSlotEnd > booked.start) {
+                        isOverlapping = true;
+                        console.log(`[getAvailability] Slot (${currentSlotStart.toLocaleTimeString()}) solapa con turno reservado: ${booked.start.toLocaleTimeString()}-${booked.end.toLocaleTimeString()}.`);
                         break;
                     }
                 }
-                
-                if (!bookedSlots.has(slotTime) && !isBlocked && isBefore(new Date(), currentTime)) {
-                    availableSlots.push(slotTime);
+                if (isOverlapping) {
+                    currentSlotStart = currentSlotEnd;
+                    continue;
                 }
 
-                currentTime = addMinutes(currentTime, schedule.slotDurationMinutes);
+                // 3. Verificar solapamiento con bloques de tiempo definidos por el profesional
+                for (const blocked of blockedPeriods) {
+                    // Si el slot actual se solapa con un bloque de tiempo
+                    if (currentSlotStart < blocked.end && currentSlotEnd > blocked.start) {
+                        isOverlapping = true;
+                        console.log(`[getAvailability] Slot (${currentSlotStart.toLocaleTimeString()}) solapa con bloqueo: ${blocked.start.toLocaleTimeString()}-${blocked.end.toLocaleTimeString()}.`);
+                        break;
+                    }
+                }
+                if (isOverlapping) {
+                    currentSlotStart = currentSlotEnd;
+                    continue;
+                }
+
+                // Si el slot está disponible (no en el pasado y no solapa), añadirlo al formato HH:mm
+                availableSlots.push(format(currentSlotStart, 'HH:mm'));
+                console.log(`[getAvailability] Slot (${currentSlotStart.toLocaleTimeString()}) AÑADIDO.`);
+
+                currentSlotStart = currentSlotEnd; // Mover al inicio del siguiente slot
             }
         }
-        
+
+        console.log(`[getAvailability] Slots disponibles finales:`, availableSlots);
         res.json(availableSlots);
 
     } catch (error) {

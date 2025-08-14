@@ -1,4 +1,3 @@
-// src/pages/ProfessionalDashboardPage/views/ProfileView.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import authFetch from '../../../utils/authFetch';
 import { useAuth } from '../../../context/AuthContext';
@@ -46,11 +45,13 @@ const ProfileView = () => {
         setLoading(true);
         setError('');
         try {
-            const userDataPromise = authFetch(`http://localhost:3001/api/users/me`);
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            const userDataPromise = authFetch(`/api/users/me`);
             let professionalDataPromise = authUser.user.role === 'PROFESSIONAL'
-                ? authFetch(`http://localhost:3001/api/users/professionals/me`)
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                ? authFetch(`/api/users/professionals/me`)
                 : Promise.resolve(null);
-            
+
             const [userData, professionalDataResponse] = await Promise.all([userDataPromise, professionalDataPromise]);
             const professionalSpecificData = professionalDataResponse || {};
 
@@ -121,7 +122,7 @@ const ProfileView = () => {
             formData.append('fullName', profileData.fullName);
             formData.append('email', profileData.email);
             formData.append('phone', profileData.phone);
-            
+
             if (authUser?.user?.role === 'PROFESSIONAL') {
                 formData.append('specialty', profileData.specialty);
                 formData.append('description', profileData.description);
@@ -130,7 +131,8 @@ const ProfileView = () => {
                 formData.append('profileImage', profileData.profileImageFile);
             }
 
-            const response = await authFetch('http://localhost:3001/api/users/me', {
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            const response = await authFetch('/api/users/me', {
                 method: 'PUT',
                 body: formData,
                 headers: { 'Content-Type': undefined },
@@ -172,7 +174,8 @@ const ProfileView = () => {
         if (Object.keys(errors).length > 0) return;
         setPasswordLoading(true);
         try {
-            await authFetch('http://localhost:3001/api/users/me/change-password', {
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            await authFetch('/api/users/me/change-password', {
                 method: 'PUT',
                 body: JSON.stringify({ currentPassword: passwordData.currentPassword, newPassword: passwordData.newPassword }),
             });
@@ -201,7 +204,7 @@ const ProfileView = () => {
     if (error) {
         return <Alert severity="warning" sx={{ m: 2 }}>{error}</Alert>;
     }
-    if (loading && !initialProfileData.dni) { 
+    if (loading && !initialProfileData.dni) {
          return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><CircularProgress /><Typography sx={{ml: 2}}>Cargando perfil...</Typography></Box>;
     }
     if (!authUser && !loadingAuth) {

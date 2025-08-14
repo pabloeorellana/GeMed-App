@@ -2,14 +2,14 @@
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
-// @desc    Obtener todos los usuarios del sistema
+// @desc    Obtener todos los usuarios del sistema (incluyendo inactivos para el admin)
 // @route   GET /api/admin/users
 // @access  Privado (ADMIN)
 export const getAllUsers = async (req, res) => {
     const pool = req.dbPool;
     try {
         const [users] = await pool.query(
-            'SELECT id, dni, fullName, email, role, isActive, createdAt FROM Users'
+            'SELECT id, dni, fullName, email, role, isActive, createdAt FROM Users ORDER BY fullName ASC'
         );
         res.json(users);
     } catch (error) {
@@ -125,18 +125,36 @@ export const updateUser = async (req, res) => {
     }
 };
 
-// @desc    Eliminar un usuario
+// @desc    Desactivar/Reactivar un usuario (Soft Delete)
 // @route   DELETE /api/admin/users/:id
 // @access  Privado (ADMIN)
-export const deleteUser = async (req, res) => {
+export const toggleUserStatus = async (req, res) => {
     const pool = req.dbPool;
     const { id: userId } = req.params;
+    
+    // Evitar que el admin se desactive a sí mismo
+    if (req.user.userId === userId) {
+        return res.status(400).json({ message: 'No puede desactivar su propia cuenta de administrador.' });
+    }
+
     try {
-        await pool.query('DELETE FROM Users WHERE id = ?', [userId]);
-        res.json({ message: 'Usuario eliminado.' });
+        // Primero, obtenemos el estado actual del usuario
+        const [users] = await pool.query('SELECT isActive FROM Users WHERE id = ?', [userId]);
+        if (users.length === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+        
+        const currentStatus = users[0].isActive;
+        const newStatus = !currentStatus; // Invertir el estado
+
+        // Actualizar el estado
+        await pool.query('UPDATE Users SET isActive = ? WHERE id = ?', [newStatus, userId]);
+        
+        const action = newStatus ? 'reactivado' : 'desactivado';
+        res.json({ message: `Usuario ${action} exitosamente.` });
     } catch (error) {
-        console.error('Error en deleteUser (admin):', error);
-        res.status(500).json({ message: 'Error del servidor al eliminar usuario.' });
+        console.error('Error en toggleUserStatus (admin):', error);
+        res.status(500).json({ message: 'Error del servidor al cambiar el estado del usuario.' });
     }
 };
 
@@ -162,5 +180,86 @@ export const getUserById = async (req, res) => {
     } catch (error) {
         console.error('Error en getUserById (admin):', error);
         res.status(500).json({ message: 'Error del servidor al obtener el usuario.' });
+    }
+};
+
+// @desc    Restablecer la contraseña de un usuario
+// @route   PUT /api/admin/users/:id/reset-password
+// @access  Privado (ADMIN)
+export const resetUserPassword = async (req, res) => {
+    const pool = req.dbPool;
+    const { id: userId } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ message: 'La nueva contraseña es requerida y debe tener al menos 6 caracteres.' });
+    }
+
+    try {
+        const [users] = await pool.query('SELECT id FROM Users WHERE id = ?', [userId]);
+        if (users.length === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(newPassword, salt);
+
+        await pool.query(
+            'UPDATE Users SET passwordHash = ? WHERE id = ?',
+            [passwordHash, userId]
+        );
+
+        res.json({ message: 'Contraseña restablecida exitosamente.' });
+    } catch (error) {
+        console.error('Error en resetUserPassword (admin):', error);
+        res.status(500).json({ message: 'Error del servidor al restablecer la contraseña.' });
+    }
+};
+
+// NUEVA FUNCIÓN
+// @desc    Eliminar un paciente permanentemente (Hard Delete)
+// @route   DELETE /api/admin/patients/:id
+// @access  Privado (ADMIN)
+export const deletePatientPermanently = async (req, res) => {
+    const pool = req.dbPool;
+    const { id: patientId } = req.params;
+
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        // Eliminar registros de ClinicalRecords asociados
+        await connection.execute(
+            'DELETE FROM ClinicalRecords WHERE patientId = ?',
+            [patientId]
+        );
+
+        // Eliminar turnos asociados
+        await connection.execute(
+            'DELETE FROM Appointments WHERE patientId = ?',
+            [patientId]
+        );
+
+        // Finalmente, eliminar el paciente
+        const [patientResult] = await connection.execute(
+            'DELETE FROM Patients WHERE id = ?',
+            [patientId]
+        );
+
+        if (patientResult.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({ message: 'Paciente no encontrado.' });
+        }
+
+        await connection.commit();
+        res.json({ message: 'Paciente y todos sus datos asociados han sido eliminados permanentemente.' });
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Error en deletePatientPermanently (admin):', error);
+        res.status(500).json({ message: 'Error del servidor al eliminar el paciente.' });
+    } finally {
+        if (connection) connection.release();
     }
 };

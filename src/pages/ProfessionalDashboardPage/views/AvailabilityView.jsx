@@ -1,4 +1,3 @@
-// src/pages/ProfessionalDashboardPage/views/AvailabilityView.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import authFetch from '../../../utils/authFetch';
 import {
@@ -202,10 +201,12 @@ const AvailabilityView = () => {
         setError('');
         try {
             const [schedulesResponse, blocksResponse] = await Promise.all([
-                authFetch('http://localhost:3001/api/availability/regular'),
-                authFetch('http://localhost:3001/api/availability/blocks')
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                authFetch('/api/availability/regular'),
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                authFetch('/api/availability/blocks')
             ]);
-            
+
             setRegularSchedules(schedulesResponse.sort((a,b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime)) || []);
             setTimeBlocks(blocksResponse.sort((a,b) => new Date(a.startDateTime) - new Date(b.startDateTime)) || []);
         } catch (error) {
@@ -225,7 +226,8 @@ const AvailabilityView = () => {
     const handleAddRegularSchedule = async (newSchedulePayload) => {
         setError('');
         try {
-            const savedSchedule = await authFetch('http://localhost:3001/api/availability/regular', {
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            const savedSchedule = await authFetch('/api/availability/regular', {
                 method: 'POST',
                 body: JSON.stringify(newSchedulePayload),
             });
@@ -240,7 +242,8 @@ const AvailabilityView = () => {
         setError('');
         if (window.confirm("¿Está seguro de que desea eliminar este horario regular?")) {
             try {
-                await authFetch(`http://localhost:3001/api/availability/regular/${scheduleId}`, { method: 'DELETE' });
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                await authFetch(`/api/availability/regular/${scheduleId}`, { method: 'DELETE' });
                 fetchAvailabilityData();
                 showNotification('Horario eliminado.', 'info');
             } catch (error) {showNotification(error.message || 'Error al eliminar el horario.', 'error');}
@@ -250,7 +253,8 @@ const AvailabilityView = () => {
     const handleAddTimeBlock = async (newBlockPayload) => {
         setError('');
         try {
-            await authFetch('http://localhost:3001/api/availability/blocks', {
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            await authFetch('/api/availability/blocks', {
                 method: 'POST',
                 body: JSON.stringify(newBlockPayload),
             });
@@ -265,7 +269,8 @@ const AvailabilityView = () => {
         setError('');
         if (window.confirm("¿Está seguro de que desea eliminar este bloqueo de tiempo?")) {
             try {
-                await authFetch(`http://localhost:3001/api/availability/blocks/${blockId}`, { method: 'DELETE' });
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                await authFetch(`/api/availability/blocks/${blockId}`, { method: 'DELETE' });
                 fetchAvailabilityData();
             } catch (error) {
                 console.error("Error eliminando bloqueo:", error);

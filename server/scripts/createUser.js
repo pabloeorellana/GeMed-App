@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import mysql from 'mysql2/promise';
-// No necesitamos 'dotenv' ni 'path' aquí, ya que se maneja en el comando npm
+import dotenv from 'dotenv'; // Importa dotenv para cargar variables de entorno
+dotenv.config({ path: '.env.development' }); // Carga las variables de .env.development
 
 const dbConfig = {
     host: process.env.DB_HOST,
@@ -70,13 +71,14 @@ const createUser = async (dni, email, password, fullName, role, specialty = null
     }
 };
 
+// Cambia userToCreate para crear un PROFESIONAL
 const userToCreate = {
-    dni: 'administrador',
-    email: 'administrador@nutrismart.com',
-    password: 'AdminPassword123!',
-    fullName: 'Administrador del Sistema',
-    role: 'ADMIN',
-    specialty: null
+    dni: '12345678', // Un DNI único para el profesional
+    email: 'profesional@nutrismart.com',
+    password: 'ProfesionalPassword123!',
+    fullName: 'Dr. Ejemplo Profesional',
+    role: 'PROFESSIONAL', // Rol: PROFESSIONAL
+    specialty: 'Nutricionista' // Especialidad requerida para profesional
 };
 
 console.log(`\nIniciando creación de usuario con rol: ${userToCreate.role}`);

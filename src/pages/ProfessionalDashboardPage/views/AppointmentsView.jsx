@@ -82,7 +82,8 @@ const AppointmentsView = () => {
         try {
             const startDate = format(viewInfo?.start || startOfWeek(new Date(), {locale: fnsEsLocale}), 'yyyy-MM-dd');
             const endDate = format(viewInfo?.end || endOfWeek(new Date(), {locale: fnsEsLocale}), 'yyyy-MM-dd');
-            const data = await authFetch(`http://localhost:3001/api/appointments?startDate=${startDate}&endDate=${endDate}`);
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            const data = await authFetch(`/api/appointments?startDate=${startDate}&endDate=${endDate}`);
             const appointmentsData = Array.isArray(data) ? data : [];
             const formattedEvents = appointmentsData.map(appt => ({
                 id: String(appt.id),
@@ -111,7 +112,8 @@ const AppointmentsView = () => {
 
     const fetchPatientsForAutocomplete = useCallback(async () => {
         try {
-            const data = await authFetch('http://localhost:3001/api/patients');
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            const data = await authFetch('/api/patients');
             setExistingPatients(data || []);
         } catch (err) {
              setError(err.message || "Error al cargar pacientes.");
@@ -151,7 +153,8 @@ const AppointmentsView = () => {
         const newStatus = event.target.value;
         if (selectedEvent) {
             try {
-                await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/status`, {
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                await authFetch(`/api/appointments/${selectedEvent.id}/status`, {
                     method: 'PUT', body: JSON.stringify({ status: newStatus }),
                 })
                 showNotification('Estado del turno actualizado.', 'success');
@@ -162,12 +165,13 @@ const AppointmentsView = () => {
             } catch (err) { showNotification(`Error cambiando estado: ${err.message}`, 'error');}
         }
     };
-    
+
     const handleSaveProfessionalNotes = async () => {
         if (selectedEvent) {
             setModalActionLoading(true);
             try {
-                await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/notes`, {
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                await authFetch(`/api/appointments/${selectedEvent.id}/notes`, {
                     method: 'PUT', body: JSON.stringify({ professionalNotes: professionalNotesModal }),
                 })
                 showNotification("Notas guardadas exitosamente.", "success");
@@ -225,7 +229,8 @@ const AppointmentsView = () => {
             reasonForVisit
         };
         try {
-            const savedAppointment = await authFetch('http://localhost:3001/api/appointments/manual', {
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            const savedAppointment = await authFetch('/api/appointments/manual', {
                 method: 'POST', body: JSON.stringify(newAppointmentPayload),
             });
             if (savedAppointment) {
@@ -281,7 +286,8 @@ const AppointmentsView = () => {
             birthDate: newPatientFormData.birthDate ? format(newPatientFormData.birthDate, 'yyyy-MM-dd') : null,
         };
         try {
-            const savedPatient = await authFetch('http://localhost:3001/api/patients', { method: 'POST', body: JSON.stringify(newPatientPayload) });
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            const savedPatient = await authFetch('/api/patients', { method: 'POST', body: JSON.stringify(newPatientPayload) });
             if(savedPatient){
                 const patientWithFullName = {...savedPatient, fullName: `${savedPatient.firstName || ''} ${savedPatient.lastName || ''}`.trim()};
                 setExistingPatients(prev => [...prev, patientWithFullName]);
@@ -305,7 +311,8 @@ const AppointmentsView = () => {
     const handleConfirmDeleteAppointment = async () => {
         if (selectedEvent) {
             try {
-                await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}`, { method: 'DELETE' });
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                await authFetch(`/api/appointments/${selectedEvent.id}`, { method: 'DELETE' });
                 setAllEvents(prev => prev.filter(e => e.id !== selectedEvent.id));
                 showNotification('Turno eliminado correctamente.', 'success');
                 handleCloseDeleteAppointmentModal();
@@ -336,7 +343,8 @@ const AppointmentsView = () => {
                 }
             }
             try {
-                await authFetch(`http://localhost:3001/api/appointments/${selectedEvent.id}/reprogram`, {
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                await authFetch(`/api/appointments/${selectedEvent.id}/reprogram`, {
                     method: 'PUT', body: JSON.stringify({ newDateTime: newDateTimeForReprogram.toISOString() }),
                 })
                     showNotification('Turno reprogramado exitosamente.', 'success');
@@ -347,11 +355,11 @@ const AppointmentsView = () => {
 
                 if (eventToUpdate) {
                     const newEndDate = new Date(newDateTimeForReprogram.getTime() + duration);
-                    
+
                     eventToUpdate.setStart(newDateTimeForReprogram);
                     eventToUpdate.setEnd(newEndDate);
                 }
-                
+
                 setAllEvents(prevEvents =>
                     prevEvents.map(event =>
                         event.id === selectedEvent.id
@@ -408,7 +416,7 @@ const AppointmentsView = () => {
                     eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
                     nowIndicator={true}
                 />
-                
+
                 {selectedEvent && (
                     <Modal open={openDetailModal} onClose={handleCloseDetailModal}>
                         <Box sx={modalStyle}>

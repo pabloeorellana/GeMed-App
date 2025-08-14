@@ -1,17 +1,20 @@
 // src/App.jsx
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles'; 
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import Typography from '@mui/material/Typography'; 
+import Typography from '@mui/material/Typography';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
 
+// Importa AppointmentBookingPage directamente
 import AppointmentBookingPage from './pages/AppointmentBookingPage/AppointmentBookingPage.jsx';
+// Ya no necesitarás importar ProfessionalSelectionPage si la eliminas
+// import ProfessionalSelectionPage from './pages/ProfessionalSelectionPage/ProfessionalSelectionPage.jsx';
+
 import ProfessionalLoginPage from './pages/ProfessionalLoginPage/ProfessionalLoginPage.jsx';
 import ProfessionalDashboardLayout from './pages/ProfessionalDashboardPage/ProfessionalDashboardLayout.jsx';
 import AdminDashboardLayout from './pages/AdminDashboardPage/AdminDashboardLayout.jsx';
-import ProfessionalSelectionPage from './pages/ProfessionalSelectionPage/ProfessionalSelectionPage.jsx';
 
 const theme = createTheme({
     palette: {
@@ -41,12 +44,12 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         // Si no está autenticado, redirige a la página de login
         return <Navigate to="/profesional/login" replace />;
     }
-    
+
     // Si la ruta requiere roles específicos y el rol del usuario no está permitido
     if (allowedRoles && !allowedRoles.includes(authUser.user.role)) {
         // Redirige a una página de "no autorizado" o de vuelta a la agenda del profesional como fallback
         // Esto previene que un 'PROFESSIONAL' acceda a '/admin/dashboard'
-        return <Navigate to="/profesional/dashboard/agenda" replace />; 
+        return <Navigate to="/profesional/dashboard/agenda" replace />;
     }
 
     return children;
@@ -61,7 +64,8 @@ function App() {
                     <AuthProvider>
                         <Routes>
                             {/* --- Rutas Públicas para Pacientes --- */}
-                            <Route path="/" element={<ProfessionalSelectionPage />} />
+                            {/* CAMBIO AQUÍ: Ahora la ruta raíz va directamente a AppointmentBookingPage */}
+                            <Route path="/" element={<AppointmentBookingPage />} />
                             <Route path="/reservar/:professionalId" element={<AppointmentBookingPage />} />
                             <Route path="/profesional/login" element={<ProfessionalLoginPage />} />
 
@@ -84,7 +88,7 @@ function App() {
                                     </ProtectedRoute>
                                 }
                             />
-                            
+
                             {/* --- Ruta para Página No Encontrada (404) --- */}
                             <Route path="*" element={<Typography sx={{p:3, textAlign:'center'}}><h2>404</h2><p>Página no encontrada</p></Typography>} />
                         </Routes>

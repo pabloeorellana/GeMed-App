@@ -3,15 +3,20 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     Box, Typography, Button, Tooltip, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, TextField, FormControl, InputLabel,
-    Select, MenuItem, Grid, Chip, Switch, FormControlLabel
+    Select, MenuItem, Grid, Chip, Switch, FormControlLabel, InputAdornment, DialogContentText
 } from '@mui/material';
 import { MaterialReactTable } from 'material-react-table';
 import { MRT_Localization_ES } from 'material-react-table/locales/es';
 import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import UnarchiveIcon from '@mui/icons-material/Unarchive';
 import authFetch from '../../../utils/authFetch';
 import { useNotification } from '../../../context/NotificationContext';
+import { useAuth } from '../../../context/AuthContext';
 
 const initialUserState = {
     dni: '', fullName: '', email: '', password: '',
@@ -20,31 +25,44 @@ const initialUserState = {
 
 const UserManagementView = () => {
     const { showNotification } = useNotification();
+    const { authUser } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    
+    const [specialties, setSpecialties] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [currentUser, setCurrentUser] = useState(initialUserState);
     const [validationErrors, setValidationErrors] = useState({});
+    const [openResetPasswordModal, setOpenResetPasswordModal] = useState(false);
+    const [userToResetPassword, setUserToResetPassword] = useState(null);
+    const [resetPasswordData, setResetPasswordData] = useState({ newPassword: '', confirmNewPassword: '' });
+    const [resetPasswordErrors, setResetPasswordErrors] = useState({});
+    const [showPassword, setShowPassword] = useState(false);
+    const [openToggleStatusConfirmModal, setOpenToggleStatusConfirmModal] = useState(false);
+    const [userToToggle, setUserToToggle] = useState(null);
 
-    const fetchUsers = useCallback(async () => {
+    const fetchUsersAndCatalogs = useCallback(async () => {
         setLoading(true);
         setError('');
         try {
-            const data = await authFetch('http://localhost:3001/api/admin/users');
-            setUsers(data || []);
+            const [usersData, specialtiesData] = await Promise.all([
+                authFetch('/api/admin/users'),
+                authFetch('/api/catalogs/specialties')
+            ]);
+            setUsers(usersData || []);
+            setSpecialties(specialtiesData || []);
         } catch (err) {
-            setError(err.message || 'Error al cargar usuarios.');
+            showNotification(err.message || 'Error al cargar datos.', 'error');
+            setError(err.message || 'Error al cargar datos.');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [showNotification]);
 
     useEffect(() => {
-        fetchUsers();
-    }, [fetchUsers]);
+        fetchUsersAndCatalogs();
+    }, [fetchUsersAndCatalogs]);
 
     const handleOpenCreateModal = () => {
         setIsEditing(false);
@@ -53,13 +71,19 @@ const UserManagementView = () => {
         setIsModalOpen(true);
     };
 
-    const handleOpenEditModal = (user) => {
+    const handleOpenEditModal = async (user) => {
         setIsEditing(true);
-        setCurrentUser({ ...user, password: '', confirmPassword: '' });
+        try {
+            const fullUserData = await authFetch(`/api/admin/users/${user.id}`);
+            setCurrentUser({ ...fullUserData, password: '', confirmPassword: '' });
+        } catch (err) {
+            showNotification(err.message, 'error');
+            setCurrentUser({ ...user, password: '', confirmPassword: '' });
+        }
         setValidationErrors({});
         setIsModalOpen(true);
     };
-    
+
     const handleCloseModal = () => {
         setIsModalOpen(false);
     };
@@ -95,7 +119,7 @@ const UserManagementView = () => {
 
     const handleSaveUser = async () => {
         if (!validateForm()) return;
-        const url = isEditing ? `http://localhost:3001/api/admin/users/${currentUser.id}` : 'http://localhost:3001/api/admin/users';
+        const url = isEditing ? `/api/admin/users/${currentUser.id}` : '/api/admin/users';
         const method = isEditing ? 'PUT' : 'POST';
 
         try {
@@ -105,25 +129,77 @@ const UserManagementView = () => {
             });
             showNotification(`Usuario ${isEditing ? 'actualizado' : 'creado'} exitosamente.`, 'success');
             handleCloseModal();
-            fetchUsers();
+            fetchUsersAndCatalogs();
         } catch (err) {
             showNotification(err.message || `Error al ${isEditing ? 'actualizar' : 'crear'} el usuario.`, 'error');
         }
     };
 
-    const handleDeleteUser = async (row) => {
-        if (window.confirm(`¿Está seguro de que desea eliminar al usuario ${row.original.fullName}?`)) {
-            try {
-                await authFetch(`http://localhost:3001/api/admin/users/${row.original.id}`, {
-                    method: 'DELETE',
-                });
-                showNotification('Usuario eliminado exitosamente.', 'success');
-                fetchUsers();
-            } catch (err) {
-                showNotification(err.message || 'Error al eliminar el usuario.', 'error');
-            }
+    const handleToggleUserStatusRequest = (user) => {
+        setUserToToggle(user);
+        setOpenToggleStatusConfirmModal(true);
+    };
+
+    const handleConfirmToggleUserStatus = async () => {
+        if (!userToToggle) return;
+        try {
+            await authFetch(`/api/admin/users/${userToToggle.id}`, { method: 'DELETE' });
+            const action = userToToggle.isActive ? 'desactivado' : 'reactivado';
+            showNotification(`Usuario ${action} exitosamente.`, 'success');
+            fetchUsersAndCatalogs();
+        } catch (err) {
+            showNotification(err.message || 'Error al cambiar el estado del usuario.', 'error');
+        } finally {
+            setOpenToggleStatusConfirmModal(false);
+            setUserToToggle(null);
         }
     };
+
+    const handleOpenResetPasswordModal = (user) => {
+        setUserToResetPassword(user);
+        setResetPasswordData({ newPassword: '', confirmNewPassword: '' });
+        setResetPasswordErrors({});
+        setOpenResetPasswordModal(true);
+    };
+
+    const handleCloseResetPasswordModal = () => {
+        setOpenResetPasswordModal(false);
+        setUserToResetPassword(null);
+    };
+
+    const handleResetPasswordChange = (event) => {
+        const { name, value } = event.target;
+        setResetPasswordData(prev => ({ ...prev, [name]: value }));
+        if (resetPasswordErrors[name]) setResetPasswordErrors(prev => ({...prev, [name]: null}));
+    };
+
+    const validateResetPasswordForm = () => {
+        const errors = {};
+        if (!resetPasswordData.newPassword) errors.newPassword = 'Contraseña es requerida.';
+        if (resetPasswordData.newPassword.length < 6) errors.newPassword = 'La contraseña debe tener al menos 6 caracteres.';
+        if (resetPasswordData.newPassword !== resetPasswordData.confirmNewPassword) {
+            errors.confirmNewPassword = 'Las contraseñas no coinciden.';
+        }
+        setResetPasswordErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const handleResetPasswordSubmit = async () => {
+        if (!validateResetPasswordForm()) return;
+        try {
+            await authFetch(`/api/admin/users/${userToResetPassword.id}/reset-password`, {
+                method: 'PUT',
+                body: JSON.stringify({ newPassword: resetPasswordData.newPassword }),
+            });
+            showNotification(`Contraseña de ${userToResetPassword.fullName} restablecida exitosamente.`, 'success');
+            handleCloseResetPasswordModal();
+        } catch (err) {
+            showNotification(err.message || 'Error al restablecer la contraseña.', 'error');
+        }
+    };
+
+    const handleClickShowPassword = () => setShowPassword((show) => !show);
+    const handleMouseDownPassword = (event) => event.preventDefault();
 
     const columns = useMemo(() => [
         { accessorKey: 'fullName', header: 'Nombre Completo' },
@@ -133,7 +209,6 @@ const UserManagementView = () => {
         { accessorKey: 'isActive', header: 'Estado', Cell: ({ cell }) => (
             <Chip label={cell.getValue() ? 'Activo' : 'Inactivo'} color={cell.getValue() ? 'success' : 'error'} size="small" />
         )},
-        { accessorKey: 'createdAt', header: 'Fecha de Creación', Cell: ({ cell }) => new Date(cell.getValue()).toLocaleDateString('es-ES'), },
     ], []);
 
     return (
@@ -147,9 +222,22 @@ const UserManagementView = () => {
                 muiToolbarAlertBannerProps={error ? { color: 'error', children: error } : undefined}
                 enableRowActions
                 renderRowActions={({ row }) => (
-                    <Box sx={{ display: 'flex', gap: '1rem' }}>
+                    <Box sx={{ display: 'flex', gap: '0.5rem' }}>
                         <Tooltip title="Editar"><IconButton onClick={() => handleOpenEditModal(row.original)}><EditIcon /></IconButton></Tooltip>
-                        <Tooltip title="Eliminar"><IconButton color="error" onClick={() => handleDeleteUser(row)}><DeleteIcon /></IconButton></Tooltip>
+                        <Tooltip title="Restablecer Contraseña"><IconButton onClick={() => handleOpenResetPasswordModal(row.original)}><VpnKeyIcon /></IconButton></Tooltip>
+                        {row.original.isActive ? (
+                            <Tooltip title="Desactivar Usuario">
+                                <IconButton color="error" onClick={() => handleToggleUserStatusRequest(row.original)}>
+                                    <ArchiveIcon />
+                                </IconButton>
+                            </Tooltip>
+                        ) : (
+                            <Tooltip title="Reactivar Usuario">
+                                <IconButton color="success" onClick={() => handleToggleUserStatusRequest(row.original)}>
+                                    <UnarchiveIcon />
+                                </IconButton>
+                            </Tooltip>
+                        )}
                     </Box>
                 )}
                 renderTopToolbarCustomActions={() => (
@@ -163,23 +251,13 @@ const UserManagementView = () => {
                 <DialogTitle>{isEditing ? 'Editar Usuario' : 'Crear Nuevo Usuario'}</DialogTitle>
                 <DialogContent>
                     <Grid container spacing={2} direction="column" sx={{ pt: 1 }}>
-                        <Grid item xs={12}>
-                            <TextField name="dni" label="DNI *" value={currentUser.dni || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.dni} helperText={validationErrors.dni} disabled={isEditing} />
-                        </Grid>
-                        <Grid item xs={12}>
-                            <TextField name="fullName" label="Nombre Completo *" value={currentUser.fullName || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.fullName} helperText={validationErrors.fullName} />
-                        </Grid>
-                        <Grid item xs={12}>
-                            <TextField name="email" label="Correo Electrónico *" type="email" value={currentUser.email || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.email} helperText={validationErrors.email} />
-                        </Grid>
+                        <Grid item xs={12}><TextField name="dni" label="DNI *" value={currentUser.dni || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.dni} helperText={validationErrors.dni} disabled={isEditing} /></Grid>
+                        <Grid item xs={12}><TextField name="fullName" label="Nombre Completo *" value={currentUser.fullName || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.fullName} helperText={validationErrors.fullName} /></Grid>
+                        <Grid item xs={12}><TextField name="email" label="Correo Electrónico *" type="email" value={currentUser.email || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.email} helperText={validationErrors.email} /></Grid>
                         {!isEditing && (
                             <>
-                                <Grid item xs={12}>
-                                    <TextField name="password" label="Contraseña *" type="password" value={currentUser.password || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.password} helperText={validationErrors.password} />
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <TextField name="confirmPassword" label="Confirmar Contraseña *" type="password" value={currentUser.confirmPassword || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.confirmPassword} helperText={validationErrors.confirmPassword} />
-                                </Grid>
+                                <Grid item xs={12}><TextField name="password" label="Contraseña *" type={showPassword ? 'text' : 'password'} value={currentUser.password || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.password} helperText={validationErrors.password} /></Grid>
+                                <Grid item xs={12}><TextField name="confirmPassword" label="Confirmar Contraseña *" type={showPassword ? 'text' : 'password'} value={currentUser.confirmPassword || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.confirmPassword} helperText={validationErrors.confirmPassword} /></Grid>
                             </>
                         )}
                         <Grid item xs={12}>
@@ -198,7 +276,14 @@ const UserManagementView = () => {
                         )}
                         {currentUser.role === 'PROFESSIONAL' && (
                             <Grid item xs={12}>
-                                <TextField name="specialty" label="Especialidad (para Profesional)" value={currentUser.specialty || ''} onChange={handleUserChange} fullWidth error={!!validationErrors.specialty} helperText={validationErrors.specialty} />
+                                <FormControl fullWidth error={!!validationErrors.specialty}>
+                                    <InputLabel>Especialidad *</InputLabel>
+                                    <Select name="specialty" value={currentUser.specialty || ''} label="Especialidad *" onChange={handleUserChange}>
+                                        {specialties.map(spec => (
+                                            <MenuItem key={spec.id} value={spec.name}>{spec.name}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
                             </Grid>
                         )}
                     </Grid>
@@ -206,6 +291,47 @@ const UserManagementView = () => {
                 <DialogActions>
                     <Button onClick={handleCloseModal}>Cancelar</Button>
                     <Button onClick={handleSaveUser} variant="contained">{isEditing ? 'Guardar Cambios' : 'Crear Usuario'}</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={openResetPasswordModal} onClose={handleCloseResetPasswordModal} maxWidth="xs" fullWidth>
+                <DialogTitle>Restablecer Contraseña para {userToResetPassword?.fullName}</DialogTitle>
+                <DialogContent>
+                    <Grid container spacing={2} direction="column" sx={{ pt: 1 }}>
+                        <Grid item xs={12}>
+                            <TextField
+                                name="newPassword" label="Nueva Contraseña *" type={showPassword ? 'text' : 'password'}
+                                value={resetPasswordData.newPassword} onChange={handleResetPasswordChange}
+                                fullWidth error={!!resetPasswordErrors.newPassword} helperText={resetPasswordErrors.newPassword}
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                name="confirmNewPassword" label="Confirmar Nueva Contraseña *" type={showPassword ? 'text' : 'password'}
+                                value={resetPasswordData.confirmNewPassword} onChange={handleResetPasswordChange}
+                                fullWidth error={!!resetPasswordErrors.confirmNewPassword} helperText={resetPasswordErrors.confirmNewPassword}
+                            />
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseResetPasswordModal}>Cancelar</Button>
+                    <Button onClick={handleResetPasswordSubmit} variant="contained">Restablecer</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={openToggleStatusConfirmModal} onClose={() => setOpenToggleStatusConfirmModal(false)}>
+                <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        ¿Está seguro de que desea **{userToToggle?.isActive ? 'desactivar' : 'reactivar'}** al usuario **{userToToggle?.fullName}**?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenToggleStatusConfirmModal(false)}>Cancelar</Button>
+                    <Button onClick={handleConfirmToggleUserStatus} color={userToToggle?.isActive ? "error" : "success"}>
+                        {userToToggle?.isActive ? 'Desactivar' : 'Reactivar'}
+                    </Button>
                 </DialogActions>
             </Dialog>
         </Box>

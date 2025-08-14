@@ -1,5 +1,4 @@
-// src/pages/ProfessionalDashboardPage/ProfessionalDashboardLayout.jsx
-import React, { useState, useEffect } from 'react'; // <<<--- AÑADIDO useEffect
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link as RouterLink, Navigate, useNavigate } from 'react-router-dom';
 import {
     AppBar, Box, CssBaseline, Drawer, IconButton, List, ListItem,
@@ -44,7 +43,8 @@ const ProfessionalDashboardLayout = (props) => {
         const fetchNotifications = async () => {
             if (!authUser) return;
             try {
-                const data = await authFetch('http://localhost:3001/api/notifications');
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                const data = await authFetch('/api/notifications');
                 setNotifications(data.notifications || []);
                 setUnreadNotifications(data.unreadCount || 0);
             } catch (error) {
@@ -62,7 +62,8 @@ const ProfessionalDashboardLayout = (props) => {
     const handleOpenNotificationsMenu = (event) => {
         setAnchorElNotifications(event.currentTarget);
         if (unreadNotifications > 0) {
-            authFetch('http://localhost:3001/api/notifications/mark-as-read', { method: 'PUT' })
+            // CAMBIO AQUÍ: Usar solo la ruta relativa
+            authFetch('/api/notifications/mark-as-read', { method: 'PUT' })
                 .then(() => setUnreadNotifications(0))
                 .catch(err => console.error("Error al marcar notificaciones como leídas:", err));
         }

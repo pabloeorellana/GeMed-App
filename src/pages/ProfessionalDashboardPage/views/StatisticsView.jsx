@@ -1,4 +1,3 @@
-// src/pages/ProfessionalDashboardPage/views/StatisticsView.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     Box, Typography, Paper, Grid, Button, CircularProgress, Stack, Divider,
@@ -83,8 +82,10 @@ const StatisticsView = () => {
             const formattedEndDate = format(endDate, 'yyyy-MM-dd');
 
             const [statsResponse, listResponse] = await Promise.all([
-                authFetch(`http://localhost:3001/api/statistics?startDate=${formattedStartDate}&endDate=${formattedEndDate}`),
-                authFetch(`http://localhost:3001/api/statistics/appointments-list?startDate=${formattedStartDate}&endDate=${formattedEndDate}`)
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                authFetch(`/api/statistics?startDate=${formattedStartDate}&endDate=${formattedEndDate}`),
+                // CAMBIO AQUÍ: Usar solo la ruta relativa
+                authFetch(`/api/statistics/appointments-list?startDate=${formattedStartDate}&endDate=${formattedEndDate}`)
             ]);
 
             setStatsData(statsResponse);
@@ -174,7 +175,7 @@ const StatisticsView = () => {
             pdf.save(`Reporte_NutriSmart_${dateString}.pdf`);
         });
     };
-    
+
     // CORRECCIÓN: Solo UNA declaración de la función para renderizar la etiqueta.
     const RADIAN = Math.PI / 180;
     const renderCustomizedPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {

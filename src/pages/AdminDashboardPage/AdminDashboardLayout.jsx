@@ -1,6 +1,6 @@
 // src/pages/AdminDashboardPage/AdminDashboardLayout.jsx
 import React, { useState } from 'react';
-import { Routes, Route, Link as RouterLink, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link as RouterLink, Navigate } from 'react-router-dom';
 import {
     AppBar, Box, CssBaseline, Drawer, IconButton, List, ListItem,
     ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography,
@@ -9,11 +9,18 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import GroupIcon from '@mui/icons-material/Group';
 import LogoutIcon from '@mui/icons-material/Logout';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import GroupsIcon from '@mui/icons-material/Groups';
+import QueryStatsIcon from '@mui/icons-material/QueryStats';
+import ClassIcon from '@mui/icons-material/Class'; // Icono para Catálogos
 import { useAuth } from '../../context/AuthContext';
-import authFetch from '../../utils/authFetch';
+
 import UserManagementView from './views/UserManagementView.jsx';
+import AdminAppointmentsView from './views/AdminAppointmentsView.jsx';
+import AdminPatientsView from './views/AdminPatientsView.jsx';
+import AdminStatisticsView from './views/AdminStatisticsView.jsx';
+import CatalogManagementView from './views/CatalogManagementView.jsx'; // <-- NUEVA VISTA
 
 const drawerWidth = 240;
 
@@ -21,10 +28,8 @@ const AdminDashboardLayout = (props) => {
     const { window } = props;
     const [mobileOpen, setMobileOpen] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
-    const navigate = useNavigate();
     const { authUser, logout } = useAuth();
     const [anchorElUser, setAnchorElUser] = useState(null);
-    const [notificationsCount, setNotificationsCount] = useState(0); // Admin notificaciones (placeholder)
 
     const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
     const handleCloseUserMenu = () => setAnchorElUser(null);
@@ -51,7 +56,10 @@ const AdminDashboardLayout = (props) => {
 
     const adminMenuItems = [
         { text: 'Gestión de Usuarios', icon: <GroupIcon />, path: 'users' },
-        // Aquí podrías añadir más items como 'Configuración', 'Reportes Globales', etc.
+        { text: 'Agenda Global', icon: <CalendarMonthIcon />, path: 'agenda' },
+        { text: 'Pacientes Globales', icon: <GroupsIcon />, path: 'pacientes' },
+        { text: 'Estadísticas Globales', icon: <QueryStatsIcon />, path: 'estadisticas' },
+        { text: 'Gestión de Catálogos', icon: <ClassIcon />, path: 'catalogs' }, // <-- NUEVO ITEM DE MENÚ
     ];
     
     const getInitials = (name) => {
@@ -119,7 +127,7 @@ const AdminDashboardLayout = (props) => {
                     <Stack direction="row" spacing={1.5} alignItems="center">
                         <Tooltip title="Notificaciones">
                             <IconButton color="inherit">
-                                <Badge badgeContent={notificationsCount} color="error">
+                                <Badge badgeContent={0} color="error">
                                     <NotificationsIcon />
                                 </Badge>
                             </IconButton>
@@ -186,8 +194,12 @@ const AdminDashboardLayout = (props) => {
             >
                 <Toolbar />
                 <Routes>
-                    <Route path="/" element={<Navigate to="users" replace />} />
+                    <Route path="/" element={<Navigate to="agenda" replace />} />
                     <Route path="users" element={<UserManagementView />} />
+                    <Route path="agenda" element={<AdminAppointmentsView />} />
+                    <Route path="pacientes" element={<AdminPatientsView />} />
+                    <Route path="estadisticas" element={<AdminStatisticsView />} />
+                    <Route path="catalogs" element={<CatalogManagementView />} /> {/* <-- NUEVA RUTA */}
                 </Routes>
             </Box>
         </Box>

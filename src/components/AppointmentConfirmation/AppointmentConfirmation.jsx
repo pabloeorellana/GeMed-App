@@ -1,3 +1,4 @@
+// src/components/AppointmentConfirmation/AppointmentConfirmation.jsx
 import React from 'react';
 import { Typography, Paper, Button, Box, Alert } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -6,7 +7,7 @@ const AppointmentConfirmation = ({ appointmentDetails, onBookAnother }) => {
     if (!appointmentDetails) return null;
 
     const { patient, dateTime } = appointmentDetails;
-    const patientName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
+    const patientName = `${patient.firstName || ''} ${patient.lastName || ''}`.trim();
 
     return (
         <Paper elevation={3} sx={{ p: 3, mt: 3, textAlign: 'center' }}>
@@ -14,11 +15,12 @@ const AppointmentConfirmation = ({ appointmentDetails, onBookAnother }) => {
             <Typography variant="h5" gutterBottom component="div">
                 Turno Confirmado!
             </Typography>
-            <Alert severity="success" sx={{mb: 2}}>
+            {/* CORRECCIÓN AQUÍ: Añadir sx para centrar el texto del Alert */}
+            <Alert severity="success" sx={{ mb: 2, justifyContent: 'center' }}>
                 Hemos recibido tu solicitud de turno.
             </Alert>
             <Typography variant="body1" sx={{ mb: 1 }}>
-                Estimado/a **{patient.name}**,
+                Estimado/a <Typography component="span" sx={{ fontWeight: 'bold' }}>{patientName}</Typography>, {/* CORRECCIÓN AQUÍ: Quitar asteriscos y usar Typography para negrita */}
             </Typography>
             <Typography variant="body1" sx={{ mb: 1 }}>
                 Tu turno ha sido programado para el:
@@ -29,11 +31,11 @@ const AppointmentConfirmation = ({ appointmentDetails, onBookAnother }) => {
                 {dateTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
             </Typography>
             <Typography variant="body2" sx={{ mb: 1 }}>
-                Recibirás una confirmación por correo electrónico en **{patient.email}**.
+                Recibirás una confirmación por correo electrónico en <Typography component="span" sx={{ fontWeight: 'bold' }}>{patient.email}</Typography>. {/* CORRECCIÓN AQUÍ */}
             </Typography>
-            {patient.whatsapp && (
+            {patient.phone && (
                 <Typography variant="body2" sx={{ mb: 2 }}>
-                    Y un mensaje de recordatorio por WhatsApp al número: **{patient.whatsapp}**.
+                    Se enviará un recordatorio a tu número de teléfono: <Typography component="span" sx={{ fontWeight: 'bold' }}>{patient.phone}</Typography>. {/* CORRECCIÓN AQUÍ */}
                 </Typography>
             )}
             <Button variant="contained" onClick={onBookAnother}>
