@@ -119,18 +119,20 @@ const PatientsView = () => {
     }, [patients, showArchived]);
 
     const patientTableColumns = useMemo(() => [
+        { accessorKey: 'dni', header: 'DNI', size: 120 },
+        { accessorKey: 'lastName', header: 'Apellido', size: 150 },
+        { accessorKey: 'firstName', header: 'Nombre', size: 150 },
+        { accessorKey: 'phone', header: 'Teléfono', Cell: ({ cell }) => cell.getValue() || 'N/A', size: 150 },
+        { accessorKey: 'email', header: 'Correo Electrónico', size: 220 },
         {
-            accessorKey: 'fullName', header: 'Nombre Completo',
-            Cell: ({ row }) => (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <Avatar sx={{ bgcolor: 'secondary.main', width: 32, height: 32, fontSize: '0.875rem' }}>{getInitials(row.original.fullName)}</Avatar>
-                    <Typography>{row.original.fullName}</Typography>
-                </Box>
-            ),
+            accessorKey: 'lastAppointment',
+            header: 'Última Consulta',
+            Cell: ({ cell }) => {
+                const date = cell.getValue();
+                return date && isValid(parseISO(date)) ? format(parseISO(date), 'dd/MM/yyyy') : 'N/A';
+            },
+            size: 150,
         },
-        { accessorKey: 'dni', header: 'DNI' },
-        { accessorKey: 'email', header: 'Correo Electrónico' },
-        { accessorKey: 'phone', header: 'Teléfono', Cell: ({ cell }) => cell.getValue() || 'N/A' },
     ], []);
 
     const handleViewPatientDetails = (patient) => setSelectedPatient(patient);
@@ -373,28 +375,42 @@ const PatientsView = () => {
                         data={filteredPatientsForTable}
                         localization={MRT_Localization_ES}
                         enableRowActions
+                        positionActionsColumn="last"
+                        enableColumnResizing
+                        layoutMode="grid"
+                        muiTablePaperProps={{ elevation: 0 }}
+                        muiTableHeadCellProps={{ sx: { fontWeight: 'normal', color: 'text.secondary', borderBottom: '1px solid rgba(224, 224, 224, 1)' } }}
+                        muiTableBodyCellProps={{ sx: { padding: '12px 16px', border: 'none' } }}
+                        muiTableBodyRowProps={{ sx: { borderBottom: '1px solid rgba(224, 224, 224, 1)', '&:last-child td, &:last-child th': { border: 0 } } }}
+                        displayColumnDefOptions={{
+                            'mrt-row-actions': {
+                                header: 'Acciones',
+                                size: 150,
+                                minSize: 150,
+                            },
+                        }}
                         renderRowActions={({ row }) => (
-                            <Box sx={{ display: 'flex', gap: '0.5rem' }}>
-                                <Tooltip title="Ver Detalles"><IconButton onClick={() => handleViewPatientDetails(row.original)}><VisibilityIcon /></IconButton></Tooltip>
-                                <Tooltip title="Editar Paciente"><IconButton onClick={() => handleEditPatient(row.original)}><EditIcon /></IconButton></Tooltip>
+                            <Box sx={{ display: 'flex', gap: '0.25rem' }}>
+                                <Tooltip title="Ver Detalles"><IconButton size="small" onClick={() => handleViewPatientDetails(row.original)}><VisibilityIcon /></IconButton></Tooltip>
+                                <Tooltip title="Editar Paciente"><IconButton size="small" onClick={() => handleEditPatient(row.original)}><EditIcon /></IconButton></Tooltip>
                                 {row.original.isActive ? (
                                     <Tooltip title="Archivar Paciente">
-                                        <IconButton color="warning" onClick={() => handleTogglePatientStatusRequest(row.original)}>
+                                        <IconButton size="small" color="warning" onClick={() => handleTogglePatientStatusRequest(row.original)}>
                                             <ArchiveIcon />
                                         </IconButton>
                                     </Tooltip>
                                 ) : (
                                     <Tooltip title="Reactivar Paciente">
-                                        <IconButton color="success" onClick={() => handleTogglePatientStatusRequest(row.original)}>
+                                        <IconButton size="small" color="success" onClick={() => handleTogglePatientStatusRequest(row.original)}>
                                             <UnarchiveIcon />
                                         </IconButton>
                                     </Tooltip>
                                 )}
                             </Box>
                         )}
-                        enableColumnFilters
+                        enableColumnFilters={false}
                         enableGlobalFilter
-                        initialState={{ showColumnFilters: false, showGlobalFilter: true }}
+                        initialState={{ showGlobalFilter: true }}
                         muiSearchTextFieldProps={{
                             placeholder: 'Buscar pacientes...',
                             sx: { m: '0.5rem 0', width: '100%' },

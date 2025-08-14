@@ -202,13 +202,23 @@ const UserManagementView = () => {
     const handleMouseDownPassword = (event) => event.preventDefault();
 
     const columns = useMemo(() => [
-        { accessorKey: 'fullName', header: 'Nombre Completo' },
-        { accessorKey: 'dni', header: 'DNI' },
-        { accessorKey: 'email', header: 'Correo Electrónico' },
-        { accessorKey: 'role', header: 'Rol' },
-        { accessorKey: 'isActive', header: 'Estado', Cell: ({ cell }) => (
-            <Chip label={cell.getValue() ? 'Activo' : 'Inactivo'} color={cell.getValue() ? 'success' : 'error'} size="small" />
-        )},
+        { accessorKey: 'dni', header: 'DNI', size: 120 },
+        {
+            accessorKey: 'fullName',
+            header: 'Nombre Completo',
+            size: 250,
+            Cell: ({ cell }) => {
+                const parts = cell.getValue().split(' ');
+                if (parts.length > 1) {
+                    const lastName = parts.pop();
+                    const firstName = parts.join(' ');
+                    return `${lastName}, ${firstName}`;
+                }
+                return cell.getValue();
+            },
+        },
+        { accessorKey: 'email', header: 'Correo Electrónico', size: 250 },
+        { accessorKey: 'phone', header: 'Teléfono', Cell: ({ cell }) => cell.getValue() || 'N/A', size: 150 },
     ], []);
 
     return (
@@ -221,19 +231,33 @@ const UserManagementView = () => {
                 state={{ isLoading: loading, showAlertBanner: !!error, showProgressBars: loading }}
                 muiToolbarAlertBannerProps={error ? { color: 'error', children: error } : undefined}
                 enableRowActions
+                positionActionsColumn="last"
+                enableColumnResizing
+                layoutMode="grid"
+                muiTablePaperProps={{ elevation: 0 }}
+                muiTableHeadCellProps={{ sx: { fontWeight: 'normal', color: 'text.secondary', borderBottom: '1px solid rgba(224, 224, 224, 1)' } }}
+                muiTableBodyCellProps={{ sx: { padding: '12px 16px', border: 'none' } }}
+                muiTableBodyRowProps={{ sx: { borderBottom: '1px solid rgba(224, 224, 224, 1)', '&:last-child td, &:last-child th': { border: 0 } } }}
+                displayColumnDefOptions={{
+                    'mrt-row-actions': {
+                        header: 'Acciones',
+                        size: 150,
+                        minSize: 150,
+                    },
+                }}
                 renderRowActions={({ row }) => (
-                    <Box sx={{ display: 'flex', gap: '0.5rem' }}>
-                        <Tooltip title="Editar"><IconButton onClick={() => handleOpenEditModal(row.original)}><EditIcon /></IconButton></Tooltip>
-                        <Tooltip title="Restablecer Contraseña"><IconButton onClick={() => handleOpenResetPasswordModal(row.original)}><VpnKeyIcon /></IconButton></Tooltip>
+                    <Box sx={{ display: 'flex', gap: '0.25rem' }}>
+                        <Tooltip title="Editar"><IconButton size="small" onClick={() => handleOpenEditModal(row.original)}><EditIcon /></IconButton></Tooltip>
+                        <Tooltip title="Restablecer Contraseña"><IconButton size="small" onClick={() => handleOpenResetPasswordModal(row.original)}><VpnKeyIcon /></IconButton></Tooltip>
                         {row.original.isActive ? (
                             <Tooltip title="Desactivar Usuario">
-                                <IconButton color="error" onClick={() => handleToggleUserStatusRequest(row.original)}>
+                                <IconButton size="small" color="error" onClick={() => handleToggleUserStatusRequest(row.original)}>
                                     <ArchiveIcon />
                                 </IconButton>
                             </Tooltip>
                         ) : (
                             <Tooltip title="Reactivar Usuario">
-                                <IconButton color="success" onClick={() => handleToggleUserStatusRequest(row.original)}>
+                                <IconButton size="small" color="success" onClick={() => handleToggleUserStatusRequest(row.original)}>
                                     <UnarchiveIcon />
                                 </IconButton>
                             </Tooltip>

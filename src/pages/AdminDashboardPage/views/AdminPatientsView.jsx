@@ -4,9 +4,8 @@ import authFetch from '../../../utils/authFetch';
 import {
     Box, Typography, Paper, IconButton, Avatar, Tooltip,
     Dialog, DialogTitle, DialogContent, DialogActions, Grid, TextField,
-    Button, Alert, DialogContentText, Chip, Divider,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    FormControl, InputLabel, Select, MenuItem, CircularProgress, Stack
+    Button, Alert, DialogContentText, Chip, Divider, CircularProgress,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Stack
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -192,19 +191,12 @@ const AdminPatientsView = () => {
     };
 
     const patientTableColumns = useMemo(() => [
+        { accessorKey: 'dni', header: 'DNI', size: 100 },
+        { accessorKey: 'lastName', header: 'Apellido', size: 150 },
+        { accessorKey: 'firstName', header: 'Nombre', size: 150 },
+        { accessorKey: 'createdByProfessionalName', header: 'Profesional Asignado', size: 200, Cell: ({ cell }) => cell.getValue() || 'Sistema/Público' },
         {
-            accessorKey: 'fullName', header: 'Nombre Paciente',
-            Cell: ({ row }) => (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <Avatar sx={{ bgcolor: 'secondary.main', width: 32, height: 32, fontSize: '0.875rem' }}>{getInitials(row.original.fullName)}</Avatar>
-                    <Typography>{row.original.fullName}</Typography>
-                </Box>
-            ),
-        },
-        { accessorKey: 'dni', header: 'DNI' },
-        { accessorKey: 'createdByProfessionalName', header: 'Profesional Asignado', Cell: ({ cell }) => cell.getValue() || 'Sistema/Público' },
-        {
-            accessorKey: 'isActive', header: 'Estado',
+            accessorKey: 'isActive', header: 'Estado', size: 100,
             Cell: ({ cell }) => (
                 <Chip label={cell.getValue() ? 'Activo' : 'Archivado'} color={cell.getValue() ? 'success' : 'default'} size="small" />
             )
@@ -265,21 +257,35 @@ const AdminPatientsView = () => {
                     state={{ isLoading: loading, showAlertBanner: !!error }}
                     muiToolbarAlertBannerProps={error ? { color: 'error', children: error } : undefined}
                     enableRowActions
+                    positionActionsColumn="last"
+                    enableColumnResizing
+                    layoutMode="grid" // Opcional: mejora el comportamiento del redimensionamiento
+                    muiTablePaperProps={{ elevation: 0 }}
+                    muiTableHeadCellProps={{ sx: { fontWeight: 'normal', color: 'text.secondary', borderBottom: '1px solid rgba(224, 224, 224, 1)' } }}
+                    muiTableBodyCellProps={{ sx: { padding: '12px 16px', border: 'none' } }}
+                    muiTableBodyRowProps={{ sx: { borderBottom: '1px solid rgba(224, 224, 224, 1)', '&:last-child td, &:last-child th': { border: 0 } } }}
+                    displayColumnDefOptions={{
+                        'mrt-row-actions': {
+                            header: 'Acciones',
+                            size: 160, // Ajustar el tamaño por defecto de la columna de acciones
+                            minSize: 160, // <-- CORRECCIÓN CLAVE
+                        },
+                    }}
                     renderRowActions={({ row }) => (
-                        <Box sx={{ display: 'flex', gap: '0.5rem' }}>
-                            <Tooltip title="Ver Detalles"><IconButton onClick={() => handleViewPatientDetails(row.original)}><VisibilityIcon /></IconButton></Tooltip>
-                            <Tooltip title="Editar Paciente"><IconButton onClick={() => handleEditPatient(row.original)}><EditIcon /></IconButton></Tooltip>
+                        <Box sx={{ display: 'flex', gap: '0.25rem' }}>
+                            <Tooltip title="Ver Detalles"><IconButton size="small" onClick={() => handleViewPatientDetails(row.original)}><VisibilityIcon /></IconButton></Tooltip>
+                            <Tooltip title="Editar Paciente"><IconButton size="small" onClick={() => handleEditPatient(row.original)}><EditIcon /></IconButton></Tooltip>
                             {row.original.isActive ? (
-                                <Tooltip title="Archivar Paciente"><IconButton color="warning" onClick={() => handleTogglePatientStatusRequest(row.original)}><ArchiveIcon /></IconButton></Tooltip>
+                                <Tooltip title="Archivar Paciente"><IconButton size="small" color="warning" onClick={() => handleTogglePatientStatusRequest(row.original)}><ArchiveIcon /></IconButton></Tooltip>
                             ) : (
-                                <Tooltip title="Reactivar Paciente"><IconButton color="success" onClick={() => handleTogglePatientStatusRequest(row.original)}><UnarchiveIcon /></IconButton></Tooltip>
+                                <Tooltip title="Reactivar Paciente"><IconButton size="small" color="success" onClick={() => handleTogglePatientStatusRequest(row.original)}><UnarchiveIcon /></IconButton></Tooltip>
                             )}
-                            <Tooltip title="Eliminar Permanente"><IconButton color="error" onClick={() => handleDeletePatientRequest(row.original)}><DeleteIcon /></IconButton></Tooltip>
+                            <Tooltip title="Eliminar Permanente"><IconButton size="small" color="error" onClick={() => handleDeletePatientRequest(row.original)}><DeleteIcon /></IconButton></Tooltip>
                         </Box>
                     )}
-                    enableColumnFilters
+                    enableColumnFilters={false}
                     enableGlobalFilter
-                    initialState={{ showColumnFilters: false, showGlobalFilter: true }}
+                    initialState={{ showGlobalFilter: true }}
                     muiSearchTextFieldProps={{
                         placeholder: 'Buscar pacientes...', sx: { m: '0.5rem 0', width: '100%' }, variant: 'outlined', size: 'small',
                     }}
